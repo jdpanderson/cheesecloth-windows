@@ -7,6 +7,12 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Changed
+
+- A full release is published unsigned while signing is not set up, as a
+  pre-release is. While signing is on, a failed signing still publishes
+  nothing.
+
 ## [0.4.0pre0-1] - 2026-10-11
 
 A test pre-release of the installer, for cheesecloth 0.4.0pre0. Unsigned.
