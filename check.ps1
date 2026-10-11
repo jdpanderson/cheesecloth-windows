@@ -90,9 +90,14 @@ function TheService {
 function EventMessages([int] $level) {
     pwsh -NoProfile -NonInteractive -Command {
         param([int] $level, [datetime] $since)
-        Get-WinEvent -FilterHashtable @{
-            LogName = 'Application'; ProviderName = 'cheesecloth'; Level = $level; StartTime = $since
-        } -ErrorAction SilentlyContinue | ForEach-Object { [string] $_.Message }
+        # No events is an error for Get-WinEvent; any other error fails.
+        try {
+            Get-WinEvent -FilterHashtable @{
+                LogName = 'Application'; ProviderName = 'cheesecloth'; Level = $level; StartTime = $since
+            } -ErrorAction Stop | ForEach-Object { [string] $_.Message }
+        } catch {
+            if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound,*') { throw }
+        }
     } -args $level, $since
     if ($LASTEXITCODE -ne 0) { throw "reading the Event Log failed with exit code $LASTEXITCODE" }
 }
