@@ -14,6 +14,13 @@
   #error Build with build.ps1, which defines Version, Arch and Stage
 #endif
 
+; build.ps1 -SignTool defines Sign, and the Sign Tool "cheesecloth".
+#ifdef Sign
+  #define SignFlag " sign"
+#else
+  #define SignFlag ""
+#endif
+
 #if Arch == "x64"
   #define Archs "x64os"
 #elif Arch == "arm64"
@@ -53,9 +60,13 @@ UninstallDisplayIcon={app}\cheesecloth.exe
 OutputBaseFilename=cheesecloth-{#Version}-windows-{#Arch}-setup
 Compression=lzma2
 SolidCompression=yes
+#ifdef Sign
+; Signs the installer and the uninstaller.
+SignTool=cheesecloth
+#endif
 
 [Files]
-Source: "{#Stage}\cheesecloth.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Stage}\cheesecloth.exe"; DestDir: "{app}"; Flags: ignoreversion{#SignFlag}
 Source: "{#Stage}\wintun.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

@@ -1,0 +1,60 @@
+# Signs the Windows installer: it rebuilds dist\cheesecloth-<v>-windows-<arch>-setup.exe
+# with Inno's SignTool, which signs cheesecloth.exe, the uninstaller and the
+# installer. WINDOWS_SIGNING_CERT (a base64 PFX file) and
+# WINDOWS_SIGNING_PASSWORD come from the environment. It never runs
+# cheesecloth.exe, so CI runs it after check.ps1 and no secret is present
+# while cargo or our binary runs.
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,
+    [Parameter(Mandatory)] [string] $Exe
+)
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+if (-not $env:WINDOWS_SIGNING_CERT -or -not $env:WINDOWS_SIGNING_PASSWORD) {
+    throw 'WINDOWS_SIGNING_CERT and WINDOWS_SIGNING_PASSWORD must be set'
+}
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+# The version of the unsigned installer that build.ps1 made, read without
+# running the binary.
+$unsigned = @(Get-Item (Join-Path $root "dist\cheesecloth-*-windows-$Arch-setup.exe"))
+if ($unsigned.Count -ne 1) { throw "expected one unsigned installer in dist, found $($unsigned.Count)" }
+$v = $unsigned[0].VersionInfo.FileVersionRaw
+$version = "$($v.Major).$($v.Minor).$($v.Build)"
+
+# The newest signtool for this machine.
+$hostArch = @{ AMD64 = 'x64'; ARM64 = 'arm64' }[$env:PROCESSOR_ARCHITECTURE]
+$signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$hostArch\signtool.exe" |
+    Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
+if (-not $signtool) { throw "no signtool.exe for $hostArch" }
+
+$pfx = Join-Path ([IO.Path]::GetTempPath()) 'cheesecloth-signing.pfx'
+$imported = @()
+try {
+    [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT))
+    $password = ConvertTo-SecureString $env:WINDOWS_SIGNING_PASSWORD -AsPlainText -Force
+    $imported = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+    Remove-Item $pfx
+    $cert = @($imported | Where-Object HasPrivateKey)
+    if ($cert.Count -ne 1) { throw "expected one certificate with a private key, found $($cert.Count)" }
+
+    # The command holds the thumbprint, not the password, so ISCC's output
+    # shows no secret. Inno replaces $q with a quote and $f with the file.
+    $command = "`$q$($signtool.FullName)`$q sign /sha1 $($cert[0].Thumbprint) /fd SHA256 " +
+        '/tr http://timestamp.digicert.com /td SHA256 $f'
+    & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Version $version -SignTool $command
+
+    $setup = Join-Path $root "dist\cheesecloth-$version-windows-$Arch-setup.exe"
+    foreach ($file in (Join-Path $root "target\windows\$Arch\stage\cheesecloth.exe"), $setup) {
+        $status = (Get-AuthenticodeSignature $file).Status
+        if ($status -ne 'Valid') { throw "the signature of $file is $status" }
+        Write-Host "ok: $file is signed"
+    }
+} finally {
+    if (Test-Path $pfx) { Remove-Item $pfx }
+    foreach ($c in $imported) {
+        Remove-Item "Cert:\CurrentUser\My\$($c.Thumbprint)" -DeleteKey:$c.HasPrivateKey
+    }
+}

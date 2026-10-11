@@ -5,9 +5,13 @@
 param(
     [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,
     [Parameter(Mandatory)] [string] $Exe,
-    # Only for tests that need another version, such as an upgrade.
+    # When given, the binary is not run. For sign.ps1, and for tests that
+    # need another version, such as an upgrade.
     [string] $Version,
-    [string] $OutDir = 'dist'
+    [string] $OutDir = 'dist',
+    # A command that signs the file $f, for Inno's SignTool. It signs
+    # cheesecloth.exe, the uninstaller and the installer. See sign.ps1.
+    [string] $SignTool
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -76,11 +80,9 @@ $license
 "@
 Set-Content -Path (Join-Path $stage 'THIRD-PARTY-NOTICES.md') -Value $notices -Encoding utf8NoBOM -NoNewline
 
-$iscc = @(
-    '/Q', "/DVersion=$Version", "/DArch=$Arch", "/DStage=$stage", "/O$OutDir",
-    (Join-Path $PSScriptRoot 'cheesecloth.iss')
-)
-& ISCC.exe @iscc
+$iscc = @('/Q', "/DVersion=$Version", "/DArch=$Arch", "/DStage=$stage", "/O$OutDir")
+if ($SignTool) { $iscc += '/DSign', "/Scheesecloth=$SignTool" }
+& ISCC.exe @iscc (Join-Path $PSScriptRoot 'cheesecloth.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed with exit code $LASTEXITCODE" }
 
 $setup = Join-Path $OutDir "cheesecloth-$Version-windows-$Arch-setup.exe"
