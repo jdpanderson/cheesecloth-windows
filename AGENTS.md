@@ -49,3 +49,6 @@ locally, so push a branch and open a pull request to run them.
   arm64.
 - **Installer:** builds the installer for x64 and arm64, then `check.ps1`
   installs, upgrades, reinstalls and uninstalls it on the runner.
+- **Sign** and **Check signed installer:** only on `main` once signing is set
+  up. They sign on a fresh runner, then run `check.ps1` on the signed
+  installer on another.

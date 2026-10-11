@@ -2,8 +2,8 @@
 # with Inno's SignTool, which signs cheesecloth.exe, the uninstaller and the
 # installer. WINDOWS_SIGNING_CERT (a base64 PFX file) and
 # WINDOWS_SIGNING_PASSWORD come from the environment. It never runs
-# cheesecloth.exe, so CI runs it after check.ps1 and no secret is present
-# while cargo or our binary runs.
+# cheesecloth.exe. CI runs it in its own job, on a runner where neither cargo
+# nor our binary has run.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'It reports progress to the console and the CI log.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '',

@@ -144,30 +144,43 @@ reinstall.
   Take the zip from <https://www.wintun.net/>, check its SHA-256 there, and
   check that its `LICENSE.txt` still allows shipping `wintun.dll` with
   cheesecloth.
-- **Inno Setup.** `INNO_SETUP_VERSION` and `INNO_SETUP_SHA256` in the
-  `installer` job of `ci.yml`. The SHA-256 is the digest of the
+- **Inno Setup.** `INNO_SETUP_VERSION` and `INNO_SETUP_SHA256` in
+  `.github/actions/inno-setup/action.yml`. The SHA-256 is the digest of the
   `innosetup-<version>-x64.exe` asset on the GitHub release of
   `jrsoftware/issrc`. If the script needs a newer version, raise the
   `#if Ver < EncodeVer(...)` line at the top of `cheesecloth.iss` too.
 
 ### Signing
 
-The `Sign` step of the `installer` job signs `cheesecloth.exe`, the
-uninstaller and the installer. It needs two repository secrets:
+The `sign` job signs `cheesecloth.exe`, the uninstaller and the installer.
+It runs on a fresh runner after the `installer` job passes, because that job
+ran our binary as a service, so its runner is not trusted with the key. The
+`sign` job never runs cargo or our binary. Then the `check-signed` job runs
+`check.ps1` on the signed installer, on another fresh runner without the
+secrets, so the installer that ships is the one that was checked. Its
+artifact is `cheesecloth-windows-<arch>-signed`.
 
-- `WINDOWS_SIGNING_CERT`: the code signing certificate and its private key,
-  as a PFX file in base64.
-- `WINDOWS_SIGNING_PASSWORD`: the PFX file's password.
+To set it up:
+
+1. Create the environment `signing` (Settings > Environments), and limit its
+   deployment branches to `main`.
+2. Add two secrets to that environment:
+   - `WINDOWS_SIGNING_CERT`: the code signing certificate and its private
+     key, as a PFX file in base64.
+   - `WINDOWS_SIGNING_PASSWORD`: the PFX file's password.
+3. Add the repository variable `WINDOWS_SIGNING` with the value `true`.
+
+Only jobs that name the environment can read its secrets, and only on
+`main`, so code from a pull request never runs with the key.
 
 `sign.ps1` imports the certificate into the runner's certificate store,
 rebuilds the installer with Inno Setup's Sign Tool
 (`signtool sign /sha1 <thumbprint> /fd SHA256 /tr <timestamp server>`), checks
-that both signatures are valid, and removes the certificate. The step runs
-after the installer checks, so no secret is present while cargo or our binary
-runs.
+that both signatures are valid, and removes the certificate. A rebuild is
+needed because Inno signs the uninstaller while it compiles.
 
 A certificate on a hardware key or in a cloud signing service needs only a
 different signing command in `sign.ps1`.
 
-Without the secrets the step is skipped, and the installers are unsigned.
-SmartScreen then warns when a user runs one.
+Without the variable, the `sign` and `check-signed` jobs are skipped, and the
+installers are unsigned. SmartScreen then warns when a user runs one.

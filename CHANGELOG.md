@@ -14,7 +14,8 @@ names the cheesecloth version it packages plus a package revision, such as
   service. CI checks it by installing, upgrading and uninstalling it.
 - The installer takes the service's options from `/CHEESECLOTH_OPTS="..."`
   or its options page, and keeps them across upgrades.
-- A CI step that signs the binary and the installer when the signing secrets
-  are set. Without them the installers are unsigned.
+- A CI job that signs the binary and the installer on a fresh runner, then
+  checks the signed installer on another. It runs on `main` once signing is
+  set up; without it the installers are unsigned.
 - `cheesecloth.json`, the cheesecloth commit that the installer packages. CI
   builds the binary from source at that commit.

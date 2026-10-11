@@ -1,0 +1,26 @@
+name: Install Inno Setup
+description: >-
+  Installs the pinned Inno Setup and puts ISCC.exe on PATH. The runners have
+  Inno Setup 6, which can't build the installer.
+runs:
+  using: composite
+  steps:
+    - name: Install Inno Setup
+      shell: pwsh
+      env:
+        # The x64 Inno Setup, which also runs on Arm64 Windows 11. To update
+        # it, see README.md.
+        INNO_SETUP_VERSION: 7.1.0
+        INNO_SETUP_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
+      run: |
+        $tag = 'is-' + $env:INNO_SETUP_VERSION.Replace('.', '_')
+        $installer = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION-x64.exe"
+        Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/$tag/innosetup-$env:INNO_SETUP_VERSION-x64.exe" -OutFile $installer
+        $hash = (Get-FileHash $installer -Algorithm SHA256).Hash
+        if ($hash -ne $env:INNO_SETUP_SHA256) { throw "the Inno Setup installer has SHA-256 $hash" }
+        $dir = Join-Path $env:RUNNER_TEMP 'innosetup'
+        $process = Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- `"/DIR=$dir`"" -Wait -PassThru
+        if ($process.ExitCode -ne 0) { throw "the Inno Setup installer exited with $($process.ExitCode)" }
+        & (Join-Path $dir 'ISCC.exe') --version
+        if ($LASTEXITCODE -ne 0) { throw "ISCC.exe --version exited with $LASTEXITCODE" }
+        Add-Content $env:GITHUB_PATH $dir

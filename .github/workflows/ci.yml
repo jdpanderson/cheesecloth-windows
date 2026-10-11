@@ -115,12 +115,6 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
-    env:
-      # The x64 Inno Setup, which also runs on Arm64 Windows 11. To update it,
-      # see README.md.
-      INNO_SETUP_VERSION: 7.1.0
-      INNO_SETUP_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
-      HAS_WINDOWS_SIGNING: ${{ secrets.WINDOWS_SIGNING_CERT != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,38 +132,113 @@ jobs:
         with:
           name: windows-exe-${{ matrix.arch }}
           path: target/exe
-      # The runners have Inno Setup 6, which can't build the installer.
-      - name: Install Inno Setup
-        run: |
-          $tag = 'is-' + $env:INNO_SETUP_VERSION.Replace('.', '_')
-          $installer = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION-x64.exe"
-          Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/$tag/innosetup-$env:INNO_SETUP_VERSION-x64.exe" -OutFile $installer
-          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash
-          if ($hash -ne $env:INNO_SETUP_SHA256) { throw "the Inno Setup installer has SHA-256 $hash" }
-          $dir = Join-Path $env:RUNNER_TEMP 'innosetup'
-          $process = Start-Process $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- `"/DIR=$dir`"" -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "the Inno Setup installer exited with $($process.ExitCode)" }
-          & (Join-Path $dir 'ISCC.exe') --version
-          if ($LASTEXITCODE -ne 0) { throw "ISCC.exe --version exited with $LASTEXITCODE" }
-          Add-Content $env:GITHUB_PATH $dir
+      - uses: ./.github/actions/inno-setup
       - name: Build installer
         run: ./build.ps1 -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
       - name: Check installer
         run: |
           $setup = (Get-Item dist/*-setup.exe).FullName
           ./check.ps1 -Setup $setup -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
-      # Rebuilds the installer, signed. The secrets are only in this step,
-      # which runs after check.ps1 and never runs cargo or our binary. Without
-      # the secrets it is skipped, and the installer stays unsigned.
-      - name: Sign
-        if: env.HAS_WINDOWS_SIGNING == 'true'
-        env:
-          WINDOWS_SIGNING_CERT: ${{ secrets.WINDOWS_SIGNING_CERT }}
-          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
-        run: ./sign.ps1 -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cheesecloth-windows-${{ matrix.arch }}
           path: dist/*-setup.exe
           if-no-files-found: error
           compression-level: 0
+
+  # Rebuilds the installer, signed, on a fresh runner: the installer job ran
+  # our binary as a service, so its runner is not trusted with the key. This
+  # job never runs cargo or our binary. The secrets are in the "signing"
+  # environment, which only main may use. The WINDOWS_SIGNING variable turns
+  # it on once the secrets are set.
+  sign:
+    name: Sign (${{ matrix.arch }})
+    needs: [pin, binary, installer]
+    if: vars.WINDOWS_SIGNING == 'true' && github.ref == 'refs/heads/main'
+    environment: signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jdpanderson/cheesecloth
+          ref: ${{ needs.pin.outputs.commit }}
+          path: cheesecloth
+          sparse-checkout: docs
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-exe-${{ matrix.arch }}
+          path: target/exe
+      # sign.ps1 reads the version from the unsigned installer, so it does not
+      # run the binary.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cheesecloth-windows-${{ matrix.arch }}
+          path: dist
+      - uses: ./.github/actions/inno-setup
+      - name: Sign
+        env:
+          WINDOWS_SIGNING_CERT: ${{ secrets.WINDOWS_SIGNING_CERT }}
+          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+        run: ./sign.ps1 -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cheesecloth-windows-${{ matrix.arch }}-signed
+          path: dist/*-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+
+  # The signed installer is a rebuild, so it gets the same checks as the
+  # unsigned one, on a fresh runner without the secrets.
+  check-signed:
+    name: Check signed installer (${{ matrix.arch }})
+    needs: [pin, binary, sign]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # check.ps1 builds an upgrade installer, which needs these.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jdpanderson/cheesecloth
+          ref: ${{ needs.pin.outputs.commit }}
+          path: cheesecloth
+          sparse-checkout: docs
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-exe-${{ matrix.arch }}
+          path: target/exe
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cheesecloth-windows-${{ matrix.arch }}-signed
+          path: dist
+      - uses: ./.github/actions/inno-setup
+      - name: Check signed installer
+        run: |
+          $setup = (Get-Item dist/*-setup.exe).FullName
+          $status = (Get-AuthenticodeSignature $setup).Status
+          if ($status -ne 'Valid') { throw "the signature of $setup is $status" }
+          ./check.ps1 -Setup $setup -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
