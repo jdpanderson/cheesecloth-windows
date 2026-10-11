@@ -7,6 +7,14 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Added
+
+- The installers are signed with a self-signed certificate, `signing.cer`.
+  The README says how to check an installer's signature against it.
+  SmartScreen still warns.
+- `verify.ps1` checks that a file is signed with `signing.cer`. CI runs it on
+  the signed installers.
+
 ## [0.4.0-1] - 2026-10-11
 
 The installer for cheesecloth 0.4.0. Unsigned.

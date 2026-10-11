@@ -52,11 +52,7 @@ try {
     & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $version -OutDir (Join-Path $PSScriptRoot 'dist') -SignTool $command
 
     $setup = Join-Path $PSScriptRoot "dist\cheesecloth-$version-windows-$Arch-setup.exe"
-    foreach ($file in (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth.exe"), $setup) {
-        $status = (Get-AuthenticodeSignature $file).Status
-        if ($status -ne 'Valid') { throw "the signature of $file is $status" }
-        Write-Host "ok: $file is signed"
-    }
+    & (Join-Path $PSScriptRoot 'verify.ps1') -File (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth.exe"), $setup
 } finally {
     if (Test-Path $pfx) { Remove-Item $pfx }
     foreach ($c in $imported) {
