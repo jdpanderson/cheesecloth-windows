@@ -168,8 +168,10 @@ For the tag, CI checks that it is `v<pinned release>-<revision>`, runs all
 the checks, and the `release` job attaches
 `cheesecloth-<package version>-windows-<arch>-setup.exe` for each
 architecture and a `SHA256SUMS` file. A pinned release with a suffix, such as
-`0.4.0pre0`, makes a pre-release, which may be unsigned. A full release must
-be signed: the `release` job fails without signing.
+`0.4.0pre0`, makes a pre-release. While signing is off, the release is
+unsigned, and its notes say so. While signing is on, the release waits for
+the signed installers and their checks; if signing fails, nothing is
+published.
 
 The installer's own version is the binary's version, such as `0.4.0`, since
 Windows versions hold only numbers. So installing `0.4.0-1` over a
@@ -221,4 +223,5 @@ A certificate on a hardware key or in a cloud signing service needs only a
 different signing command in `sign.ps1`.
 
 Without the variable, the `sign` and `check-signed` jobs are skipped, and the
-installers are unsigned. SmartScreen then warns when a user runs one.
+installers and releases are unsigned. SmartScreen then warns when a user
+runs one.

@@ -329,8 +329,9 @@ jobs:
           ./check.ps1 -Setup $setup -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
 
   # Publishes a package release for a tag v<release>-<revision>, after every
-  # check passed. sign and check-signed are skipped while signing is off, so
-  # they may be skipped here; but a full release must be signed.
+  # check passed. While signing is off, sign and check-signed are skipped and
+  # the release is unsigned. While it is on, they must pass, so a failed
+  # signing never falls back to an unsigned release.
   release:
     name: Publish release
     needs: [lint, pin, installer, sign, check-signed]
@@ -355,17 +356,17 @@ jobs:
           TAG: ${{ github.ref_name }}
           PACKAGE: ${{ needs.pin.outputs.package }}
           RELEASE: ${{ needs.pin.outputs.release }}
+          SIGNING: ${{ vars.WINDOWS_SIGNING == 'true' }}
           SIGNED: ${{ needs.check-signed.result == 'success' }}
         run: |
+          if [[ "$SIGNING" == true && "$SIGNED" != true ]]; then
+            echo "::error::signing is on, but the signed installers were not checked"
+            exit 1
+          fi
           # Only a plain X.Y.Z release of cheesecloth makes a full release; a
           # suffix such as "pre0" makes a pre-release.
           flags=()
-          if [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            if [[ "$SIGNED" != true ]]; then
-              echo "::error::a full release must be signed; see Signing in README.md"
-              exit 1
-            fi
-          else
+          if [[ ! "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             flags+=(--prerelease)
           fi
           suffix=""
