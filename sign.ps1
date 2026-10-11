@@ -7,7 +7,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,
-    [Parameter(Mandatory)] [string] $Exe
+    [Parameter(Mandatory)] [string] $Exe,
+    # The cheesecloth checkout that build.ps1 took.
+    [Parameter(Mandatory)] [string] $Source
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -15,11 +17,10 @@ Set-StrictMode -Version Latest
 if (-not $env:WINDOWS_SIGNING_CERT -or -not $env:WINDOWS_SIGNING_PASSWORD) {
     throw 'WINDOWS_SIGNING_CERT and WINDOWS_SIGNING_PASSWORD must be set'
 }
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
 # The version of the unsigned installer that build.ps1 made, read without
 # running the binary.
-$unsigned = @(Get-Item (Join-Path $root "dist\cheesecloth-*-windows-$Arch-setup.exe"))
+$unsigned = @(Get-Item (Join-Path $PSScriptRoot "dist\cheesecloth-*-windows-$Arch-setup.exe"))
 if ($unsigned.Count -ne 1) { throw "expected one unsigned installer in dist, found $($unsigned.Count)" }
 $v = $unsigned[0].VersionInfo.FileVersionRaw
 $version = "$($v.Major).$($v.Minor).$($v.Build)"
@@ -44,10 +45,10 @@ try {
     # shows no secret. Inno replaces $q with a quote and $f with the file.
     $command = "`$q$($signtool.FullName)`$q sign /sha1 $($cert[0].Thumbprint) /fd SHA256 " +
         '/tr http://timestamp.digicert.com /td SHA256 $f'
-    & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Version $version -SignTool $command
+    & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $version -OutDir (Join-Path $PSScriptRoot 'dist') -SignTool $command
 
-    $setup = Join-Path $root "dist\cheesecloth-$version-windows-$Arch-setup.exe"
-    foreach ($file in (Join-Path $root "target\windows\$Arch\stage\cheesecloth.exe"), $setup) {
+    $setup = Join-Path $PSScriptRoot "dist\cheesecloth-$version-windows-$Arch-setup.exe"
+    foreach ($file in (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth.exe"), $setup) {
         $status = (Get-AuthenticodeSignature $file).Status
         if ($status -ne 'Valid') { throw "the signature of $file is $status" }
         Write-Host "ok: $file is signed"

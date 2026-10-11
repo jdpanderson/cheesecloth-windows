@@ -7,13 +7,14 @@ param(
     [Parameter(Mandatory)] [string] $Setup,
     [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,
     # The cheesecloth.exe that the installer holds.
-    [Parameter(Mandatory)] [string] $Exe
+    [Parameter(Mandatory)] [string] $Exe,
+    # The cheesecloth checkout that build.ps1 took, for the upgrade.
+    [Parameter(Mandatory)] [string] $Source
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$work = Join-Path $root "target\windows\$Arch"
+$work = Join-Path $PSScriptRoot "target\windows\$Arch"
 $Setup = (Resolve-Path $Setup).Path
 $Exe = (Resolve-Path $Exe).Path
 $app = Join-Path $env:ProgramFiles 'cheesecloth'
@@ -188,7 +189,7 @@ Write-Host '== Upgrade'
 $v = [version]$version
 $next = "$($v.Major).$($v.Minor).$($v.Build + 1)"
 $upgradeDir = Join-Path $work 'upgrade'
-& (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Version $next -OutDir $upgradeDir
+& (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $next -OutDir $upgradeDir
 $upgrade = Join-Path $upgradeDir "cheesecloth-$next-windows-$Arch-setup.exe"
 $old = (TheService).ProcessId
 Install $upgrade 'upgrade'

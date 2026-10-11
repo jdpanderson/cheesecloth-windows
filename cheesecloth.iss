@@ -1,7 +1,7 @@
 ; The cheesecloth installer for Windows, built by build.ps1 with Inno Setup.
 ; It installs the binary, wintun.dll and the docs, adds the folder to the
 ; system PATH, registers the Event Log source, and sets up and starts the
-; service, as packaging/cheesecloth.service does with systemd.
+; service, as packaging/cheesecloth.service in cheesecloth does with systemd.
 ; /CHEESECLOTH_OPTS="..." on the command line, or the wizard's options page,
 ; sets the daemon's options, as CHEESECLOTH_OPTS does on Linux.
 ;
@@ -37,8 +37,8 @@ AppName=cheesecloth
 AppVersion={#Version}
 VersionInfoVersion={#Version}
 AppPublisher=Jonathan Anderson
-AppPublisherURL=https://github.com/jdpanderson/cheesecloth-rs
-AppSupportURL=https://github.com/jdpanderson/cheesecloth-rs/issues
+AppPublisherURL=https://github.com/jdpanderson/cheesecloth
+AppSupportURL=https://github.com/jdpanderson/cheesecloth/issues
 DefaultDirName={autopf}\cheesecloth
 DisableDirPage=auto
 DisableProgramGroupPage=yes
@@ -75,7 +75,7 @@ Source: "{#Stage}\docs\*.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
 [Registry]
 ; The Event Log source. Event Viewer reads each event's text from the message
-; table in cheesecloth.exe (see crates/cheesecloth/build.rs).
+; table in cheesecloth.exe (see crates/cheesecloth/build.rs in cheesecloth).
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\cheesecloth"; ValueType: expandsz; ValueName: "EventMessageFile"; ValueData: "{app}\cheesecloth.exe"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\cheesecloth"; ValueType: dword; ValueName: "TypesSupported"; ValueData: 7
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath
@@ -86,7 +86,8 @@ const
   ServiceDescription = 'cheesecloth peer-to-peer WireGuard mesh';
   { How long to wait for the service to stop or start, in ms. }
   StateTimeout = 60000;
-  { Matches WAIT_HINT in crates/cheesecloth-daemon/src/service/windows.rs. }
+  { Matches WAIT_HINT in crates/cheesecloth-daemon/src/service/windows.rs in
+    cheesecloth. }
   PreshutdownTimeout = 30000;
   { Setup's exit code when the files are installed but the service is not
     set up. }

@@ -1,0 +1,4 @@
+/target/
+/dist/
+# The cheesecloth checkout that CI builds from.
+/cheesecloth/
