@@ -1,10 +1,13 @@
 # Windows installer
 
-An Inno Setup installer for cheesecloth on Windows. It installs
-`cheesecloth.exe` with `wintun.dll` into `C:\Program Files\cheesecloth`, adds
-that folder to the system PATH, registers the Event Log source, and sets up
-and starts the service. See [docs/WINDOWS.md](../../docs/WINDOWS.md) for the
-service itself, its logs, the CLI and the Windows weak points.
+An Inno Setup installer for
+[cheesecloth](https://github.com/jdpanderson/cheesecloth) on Windows. It
+installs `cheesecloth.exe` with `wintun.dll` into
+`C:\Program Files\cheesecloth`, adds that folder to the system PATH, registers
+the Event Log source, and sets up and starts the service. See
+[docs/WINDOWS.md](https://github.com/jdpanderson/cheesecloth/blob/main/docs/WINDOWS.md)
+in cheesecloth for the service itself, its logs, the CLI and the Windows weak
+points.
 
 ## Install
 
@@ -94,9 +97,40 @@ and cluster state; delete it to forget the node. Leave the cluster first with
 
 ## Building and releasing
 
-CI builds and checks the installers in the `windows-installer` job of
-`.github/workflows/packages.yml`: `build.ps1` builds one, and `check.ps1`
-installs, upgrades, reinstalls and uninstalls it on the runner.
+CI (`.github/workflows/ci.yml`) builds `cheesecloth.exe` at the pinned
+commit in the `binary` job. The `installer` job then builds and checks the
+installers: `build.ps1` builds one, and `check.ps1` installs, upgrades,
+reinstalls and uninstalls it on the runner.
+
+To build one by hand, with Inno Setup on PATH and a cheesecloth checkout
+beside this one, at the commit that built the exe:
+
+```powershell
+.\build.ps1 -Arch x64 -Exe ..\cheesecloth\target\release\cheesecloth.exe -Source ..\cheesecloth
+```
+
+### The pin file
+
+`cheesecloth.json` names the cheesecloth commit that the installer packages:
+
+```json
+{ "commit": "<full commit SHA-1>" }
+```
+
+CI checks out cheesecloth at that commit, builds the binary from source, and
+takes the README, LICENSE, notices and docs from the same checkout.
+
+When cheesecloth releases attach a binary for each target, the pin will name
+a release and the SHA-256 of each binary in place of the commit, and CI will
+download and check them:
+
+```json
+{ "release": "v0.4.0", "sha256": { "x64": "<sha256>", "arm64": "<sha256>" } }
+```
+
+CI does not read this form yet. Before a package release, the pin must name a
+release. For work that spans both repositories, change cheesecloth first and
+merge it, then pin that commit here.
 
 Before a release, run the installer from the last CI run of `main` once on a
 Windows machine with its wizard: check the pages, the options page, and that
@@ -111,14 +145,14 @@ reinstall.
   check that its `LICENSE.txt` still allows shipping `wintun.dll` with
   cheesecloth.
 - **Inno Setup.** `INNO_SETUP_VERSION` and `INNO_SETUP_SHA256` in the
-  `windows-installer` job of `packages.yml`. The SHA-256 is the digest of the
+  `installer` job of `ci.yml`. The SHA-256 is the digest of the
   `innosetup-<version>-x64.exe` asset on the GitHub release of
   `jrsoftware/issrc`. If the script needs a newer version, raise the
   `#if Ver < EncodeVer(...)` line at the top of `cheesecloth.iss` too.
 
 ### Signing
 
-The `Sign` step of the `windows-installer` job signs `cheesecloth.exe`, the
+The `Sign` step of the `installer` job signs `cheesecloth.exe`, the
 uninstaller and the installer. It needs two repository secrets:
 
 - `WINDOWS_SIGNING_CERT`: the code signing certificate and its private key,
