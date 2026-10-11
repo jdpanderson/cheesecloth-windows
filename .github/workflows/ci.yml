@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    # A package release: v<release>-<revision>. See README.md.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -224,12 +226,14 @@ jobs:
   # Rebuilds the installer, signed, on a fresh runner: the installer job ran
   # our binary as a service, so its runner is not trusted with the key. This
   # job never runs cargo or our binary. The secrets are in the "signing"
-  # environment, which only main may use. The WINDOWS_SIGNING variable turns
-  # it on once the secrets are set.
+  # environment, which only main and v* tags may use. The WINDOWS_SIGNING
+  # variable turns it on once the secrets are set.
   sign:
     name: Sign (${{ matrix.arch }})
     needs: [pin, binary, installer]
-    if: vars.WINDOWS_SIGNING == 'true' && github.ref == 'refs/heads/main'
+    if: >-
+      vars.WINDOWS_SIGNING == 'true' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     environment: signing
     defaults:
       run:
@@ -323,3 +327,64 @@ jobs:
           $status = (Get-AuthenticodeSignature $setup).Status
           if ($status -ne 'Valid') { throw "the signature of $setup is $status" }
           ./check.ps1 -Setup $setup -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
+
+  # Publishes a package release for a tag v<release>-<revision>, after every
+  # check passed. sign and check-signed are skipped while signing is off, so
+  # they may be skipped here; but a full release must be signed.
+  release:
+    name: Publish release
+    needs: [lint, pin, installer, sign, check-signed]
+    if: >-
+      !cancelled() && startsWith(github.ref, 'refs/tags/v') &&
+      needs.lint.result == 'success' && needs.installer.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.sign.result) &&
+      contains(fromJSON('["success", "skipped"]'), needs.check-signed.result)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          pattern: cheesecloth-windows-*
+      - name: Attach the installers to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PACKAGE: ${{ needs.pin.outputs.package }}
+          RELEASE: ${{ needs.pin.outputs.release }}
+          SIGNED: ${{ needs.check-signed.result == 'success' }}
+        run: |
+          # Only a plain X.Y.Z release of cheesecloth makes a full release; a
+          # suffix such as "pre0" makes a pre-release.
+          flags=()
+          if [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [[ "$SIGNED" != true ]]; then
+              echo "::error::a full release must be signed; see Signing in README.md"
+              exit 1
+            fi
+          else
+            flags+=(--prerelease)
+          fi
+          suffix=""
+          kind=unsigned
+          if [[ "$SIGNED" == true ]]; then
+            suffix=-signed
+            kind=signed
+          fi
+          mkdir release
+          for arch in x64 arm64; do
+            setup=(dist/"cheesecloth-windows-$arch$suffix"/*-setup.exe)
+            if [[ ${#setup[@]} -ne 1 || ! -f "${setup[0]}" ]]; then
+              echo "::error::expected one installer for $arch, found: ${setup[*]}"
+              exit 1
+            fi
+            cp "${setup[0]}" "release/cheesecloth-$PACKAGE-windows-$arch-setup.exe"
+          done
+          cd release
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+          gh release create "$TAG" --verify-tag --title "$PACKAGE" --generate-notes "${flags[@]}" \
+            --notes "Windows installers ($kind) for cheesecloth $RELEASE." -- *
