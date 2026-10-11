@@ -93,9 +93,11 @@ and cluster state; delete it to forget the node. Leave the cluster first with
 - **Event Viewer blocks an upgrade.** Windows reads the text of cheesecloth's
   events from `cheesecloth.exe`. While a program shows those events, such as
   Event Viewer or `Get-WinEvent` in an open PowerShell, it holds the file,
-  and Setup cannot replace it. Setup then stops with exit code 7 before it
-  changes any file, and the service stays stopped and disabled. Close the
-  program and run Setup again.
+  and Setup cannot replace it. Setup waits up to 5 seconds for the file to
+  be free, then asks you to close the program and click Retry. A silent
+  install with `/SUPPRESSMSGBOXES` stops instead, with exit code 7, before it
+  changes any file. The service stays stopped and disabled until an install
+  succeeds.
 - **Old events lose their text** after an uninstall, because the Event Log
   source is removed.
 - **No MSI.** Group Policy and Intune MSI deployment are not possible. Run the

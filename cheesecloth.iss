@@ -93,6 +93,9 @@ const
     set up. }
   ServiceSetupFailed = 10;
   EnvironmentKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
+  { How long to wait for cheesecloth.exe to be free before asking, in ms. }
+  InUseWait = 5000;
+  InUseMessage = 'cheesecloth.exe is in use, for example by Event Viewer showing cheesecloth''s events.';
 
   SC_MANAGER_CONNECT = $0001;
   SERVICE_CHANGE_CONFIG = $0002;
@@ -475,7 +478,8 @@ begin
   F := CreateFile(Exe, DELETE_ACCESS, FILE_SHARE_ALL, 0, OPEN_EXISTING, 0, 0);
   if F = -1 then
   begin
-    Log('Opening ' + Exe + ' to delete it failed: ' + SysErrorMessage(DLLGetLastError));
+    Log('cheesecloth.exe is in use: opening it to delete it failed: ' +
+      SysErrorMessage(DLLGetLastError));
     Result := True;
     Exit;
   end;
@@ -483,7 +487,8 @@ begin
     Mark := 1;
     if not SetFileInformationByHandle(F, FileDispositionInfo, Mark, 1) then
     begin
-      Log('Marking ' + Exe + ' for deletion failed: ' + SysErrorMessage(DLLGetLastError));
+      Log('cheesecloth.exe is in use: marking it for deletion failed: ' +
+        SysErrorMessage(DLLGetLastError));
       Result := True;
     end
     else
@@ -498,7 +503,26 @@ begin
   end;
 end;
 
-{ A failure here makes Setup exit with code 7 before it changes any file. }
+{ Waits up to InUseWait for cheesecloth.exe to be free, since a program
+  that read cheesecloth's events may hold it for a moment. Returns whether
+  it is free. }
+function WaitForExe: Boolean;
+var
+  Waited: Integer;
+begin
+  Waited := 0;
+  Result := not ExeInUse;
+  while not Result and (Waited < InUseWait) do
+  begin
+    Sleep(500);
+    Waited := Waited + 500;
+    Result := not ExeInUse;
+  end;
+end;
+
+{ A failure here makes Setup exit with code 7 before it changes any file.
+  While cheesecloth.exe stays in use, the wizard asks the user to close the
+  program and retry; /SUPPRESSMSGBOXES answers Cancel. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
@@ -508,9 +532,13 @@ begin
     Result := 'The cheesecloth service could not be stopped: ' + GetExceptionMessage;
     Exit;
   end;
-  if ExeInUse then
-    Result := 'cheesecloth.exe is in use, for example by Event Viewer showing ' +
-      'cheesecloth''s events. Close it and run Setup again.';
+  while not WaitForExe do
+    if SuppressibleMsgBox(InUseMessage + ' Close that program, then click Retry.',
+      mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
+    begin
+      Result := InUseMessage + ' Close that program and run Setup again.';
+      Exit;
+    end;
 end;
 
 { Inno has no rollback for this step, so a failure keeps the installed files

@@ -41,14 +41,20 @@ function WaitUntil([string] $what, [scriptblock] $test, [int] $seconds = 60) {
     Write-Host "ok: $what"
 }
 
-# Runs the installer silently. It must exit with $expect; else its log is
-# printed, with the cheesecloth processes that still run, which may hold
-# files that Setup could not replace.
-function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0) {
+# Runs the installer silently. $during runs while it runs, with the path of
+# its log. It must exit with $expect; else its log is printed, with the
+# cheesecloth processes that still run, which may hold files that Setup could
+# not replace.
+function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0,
+    [scriptblock] $during = {}) {
     $log = Join-Path $work "$name.log"
     $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART `"/LOG=$log`" $more"
     Write-Host "running $installer $arguments"
-    $process = Start-Process $installer -ArgumentList $arguments -Wait -PassThru
+    $process = Start-Process $installer -ArgumentList $arguments -PassThru
+    # Without an open handle, the exit code is lost when the process exits.
+    $null = $process.Handle
+    & $during $log
+    $process.WaitForExit()
     if ($process.ExitCode -ne $expect) {
         if (Test-Path $log) { Get-Content $log | Write-Host }
         $running = @(Get-Process cheesecloth -ErrorAction SilentlyContinue)
@@ -251,28 +257,53 @@ WaitUntil 'a member after the fix' { $s = Status; $s -and $s.phase -eq 'member' 
 
 Write-Host '== cheesecloth.exe in use'
 # A program that shows cheesecloth's events, such as Event Viewer, loads
-# cheesecloth.exe as a resource file, as this does. Setup must stop before it
-# changes any file.
+# cheesecloth.exe as a resource file, as this does. Setup must wait for it,
+# and stop before it changes any file if it stays in use.
 Add-Type -Namespace Check -Name Kernel32 -MemberDefinition @'
 [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
 public static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
 [DllImport("kernel32.dll", SetLastError = true)]
 public static extern bool FreeLibrary(IntPtr module);
 '@
-# LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
-$module = [Check.Kernel32]::LoadLibraryExW($cli, [IntPtr]::Zero, 0x22)
-if ($module -eq [IntPtr]::Zero) {
-    throw "loading cheesecloth.exe failed: error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+function HoldExe {
+    # LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
+    $module = [Check.Kernel32]::LoadLibraryExW($cli, [IntPtr]::Zero, 0x22)
+    if ($module -eq [IntPtr]::Zero) {
+        throw "loading cheesecloth.exe failed: error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+    }
+    $module
 }
-try {
-    Install $upgrade 'in-use' -Expect 7
-    $log = Join-Path $work 'in-use.log'
-    Check (Select-String -Path $log -Pattern 'cheesecloth.exe is in use' -SimpleMatch -Quiet) 'Setup says that cheesecloth.exe is in use'
-} finally {
+
+function ReleaseExe([IntPtr] $module) {
     if (-not [Check.Kernel32]::FreeLibrary($module)) { throw 'FreeLibrary failed' }
 }
-Install $upgrade 'released'
-Check ((TheService).State -eq 'Running') 'Setup succeeds once cheesecloth.exe is free'
+
+# Held all the time: Setup waits a few seconds, then stops with code 7.
+$module = HoldExe
+try {
+    Install $upgrade 'in-use' -Expect 7
+} finally {
+    ReleaseExe $module
+}
+$log = Join-Path $work 'in-use.log'
+Check (Select-String -Path $log -Pattern 'Close that program and run Setup again' -SimpleMatch -Quiet) 'Setup says that cheesecloth.exe is in use'
+
+# Released while Setup waits: Setup goes on.
+$module = HoldExe
+$held = $true
+try {
+    Install $upgrade 'released' -During {
+        param($log)
+        WaitUntil 'Setup finds cheesecloth.exe in use' {
+            (Test-Path $log) -and (Select-String -Path $log -Pattern 'cheesecloth.exe is in use:' -SimpleMatch -Quiet)
+        } -Seconds 30
+        ReleaseExe $module
+        $script:held = $false
+    }
+} finally {
+    if ($held) { ReleaseExe $module }
+}
+Check ((TheService).State -eq 'Running') 'Setup waits until cheesecloth.exe is free'
 CheckRestarts
 WaitUntil 'a member after the release' { $s = Status; $s -and $s.phase -eq 'member' }
 
