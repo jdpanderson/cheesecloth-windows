@@ -89,9 +89,11 @@ function Machine([string] $path) {
     [BitConverter]::ToUInt16($bytes, [BitConverter]::ToInt32($bytes, 0x3C) + 4)
 }
 
+# PowerShell unrolls what a function returns, so wrap the call in @() to
+# count the entries.
 function UninstallEntries {
-    @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' |
-        Where-Object { ($_.GetValue('DisplayName') -as [string]) -like 'cheesecloth*' })
+    Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' |
+        Where-Object { ($_.GetValue('DisplayName') -as [string]) -like 'cheesecloth*' }
 }
 
 $version = (& $Exe --version) -replace '^cheesecloth ', ''
@@ -196,7 +198,7 @@ $upgradeDir = Join-Path $work 'upgrade'
 $upgrade = Join-Path $upgradeDir "cheesecloth-$next-windows-$Arch-setup.exe"
 $old = (TheService).ProcessId
 Install $upgrade 'upgrade'
-$entries = UninstallEntries
+$entries = @(UninstallEntries)
 Check ($entries.Count -eq 1) 'the upgrade replaced the old install'
 Check ($entries[0].GetValue('DisplayVersion') -eq $next) 'the Uninstall entry has the new version'
 $service = TheService
