@@ -37,39 +37,83 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint"
 
-  # Reads the pin once, so the other jobs build and package the same commit.
+  # Reads the pin once, so the other jobs package the same cheesecloth. For a
+  # tag, it also checks that the tag names the pinned release.
   pin:
     name: Pin
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      commit: ${{ steps.pin.outputs.commit }}
+      # The cheesecloth ref to take the docs from: the commit, or v<release>.
+      ref: ${{ steps.pin.outputs.ref }}
+      # Empty for a commit.
+      release: ${{ steps.pin.outputs.release }}
+      sha256-x64: ${{ steps.pin.outputs.sha256-x64 }}
+      sha256-arm64: ${{ steps.pin.outputs.sha256-arm64 }}
+      # For a tag: <release>-<revision>.
+      package: ${{ steps.pin.outputs.package }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Until cheesecloth releases attach binaries, the pin names a commit,
-      # and CI builds the binary from source. See README.md.
+      # The format is in "Contracts" in cheesecloth's docs/REPOSITORIES.md.
       - name: Read cheesecloth.pin
         id: pin
         shell: python3 -I {0}
         run: |
           import os, re, sys, tomllib
 
+          def fail(message):
+              sys.exit(f"::error::{message}")
+
+          # The Rust target of each architecture.
+          targets = {"x64": "x86_64-pc-windows-msvc", "arm64": "aarch64-pc-windows-msvc"}
+
           with open("cheesecloth.pin", "rb") as f:
               pin = tomllib.load(f)
-          if "release" in pin:
-              sys.exit("::error::CI cannot download release binaries yet; pin a commit")
-          if pin.keys() != {"commit"}:
-              sys.exit(f"::error::cheesecloth.pin must hold only commit, not {sorted(pin)}")
-          commit = pin["commit"]
-          if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
-              sys.exit(f"::error::the commit in cheesecloth.pin is not a full commit id: {commit!r}")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"commit={commit}\n")
+          out = {}
+          if "commit" in pin:
+              if pin.keys() != {"commit"}:
+                  fail(f"a commit pin must hold only commit, not {sorted(pin)}")
+              commit = pin["commit"]
+              if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+                  fail(f"the commit in cheesecloth.pin is not a full commit id: {commit!r}")
+              out["ref"] = commit
+          elif "release" in pin:
+              if pin.keys() != {"release", "sha256"}:
+                  fail(f"a release pin must hold only release and sha256, not {sorted(pin)}")
+              release = pin["release"]
+              if not isinstance(release, str) or not re.fullmatch(r"\d+\.\d+\.\d+[0-9A-Za-z.-]*", release):
+                  fail(f"the release in cheesecloth.pin is not a version: {release!r}")
+              sha256 = pin["sha256"]
+              if not isinstance(sha256, dict) or sha256.keys() != set(targets.values()):
+                  fail(f"[sha256] must list exactly {sorted(targets.values())}")
+              for target, digest in sha256.items():
+                  if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                      fail(f"the SHA-256 of {target} is not 64 hex digits: {digest!r}")
+              out["ref"] = f"v{release}"
+              out["release"] = release
+              for arch, target in targets.items():
+                  out[f"sha256-{arch}"] = sha256[target]
+          else:
+              fail("cheesecloth.pin must hold a commit or a release")
 
-  # Builds cheesecloth.exe at the pinned commit. The tests run in
-  # cheesecloth's own CI.
+          ref = os.environ["GITHUB_REF"]
+          if ref.startswith("refs/tags/"):
+              tag = ref.removeprefix("refs/tags/")
+              if "release" not in out:
+                  fail(f"tag {tag}: a package release needs a release in cheesecloth.pin")
+              if not re.fullmatch(rf"v{re.escape(out['release'])}-[1-9][0-9]*", tag):
+                  fail(f"tag {tag} must be v{out['release']}-<revision>")
+              out["package"] = tag.removeprefix("v")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for key, value in out.items():
+                  f.write(f"{key}={value}\n")
+
+  # The pinned cheesecloth.exe. A release pin: downloads it from the release
+  # and checks it against the pin. A commit pin: builds it at that commit;
+  # the tests run in cheesecloth's own CI.
   binary:
     name: Binary (${{ matrix.arch }})
     needs: pin
@@ -79,24 +123,47 @@ jobs:
         include:
           - runner: windows-2025
             arch: x64
+            target: x86_64-pc-windows-msvc
           - runner: windows-11-arm
             arch: arm64
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: stable
     steps:
+      - name: Download and check the release binary
+        if: needs.pin.outputs.release != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ needs.pin.outputs.release }}
+          TARGET: ${{ matrix.target }}
+          SHA256: ${{ needs.pin.outputs[format('sha256-{0}', matrix.arch)] }}
+        run: |
+          $asset = "cheesecloth-$env:RELEASE-$env:TARGET.exe"
+          gh release download "v$env:RELEASE" -R jdpanderson/cheesecloth -p $asset -D target/download
+          if ($LASTEXITCODE -ne 0) { throw "downloading $asset failed" }
+          $hash = (Get-FileHash "target/download/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -cne $env:SHA256) { throw "$asset has SHA-256 $hash, but cheesecloth.pin has $env:SHA256" }
+          Write-Host "ok: $asset has the SHA-256 in cheesecloth.pin"
+          New-Item -ItemType Directory -Force target/release | Out-Null
+          Move-Item "target/download/$asset" target/release/cheesecloth.exe
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.pin.outputs.release == ''
         with:
           repository: jdpanderson/cheesecloth
-          ref: ${{ needs.pin.outputs.commit }}
+          ref: ${{ needs.pin.outputs.ref }}
           persist-credentials: false
       - name: Select stable Rust
+        if: needs.pin.outputs.release == ''
         run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: needs.pin.outputs.release == ''
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build
+        if: needs.pin.outputs.release == ''
         run: cargo build --release --locked -p cheesecloth
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -128,11 +195,11 @@ jobs:
         with:
           persist-credentials: false
       # The README, LICENSE, notices and docs that the installer holds, from
-      # the commit that built the exe.
+      # the pinned commit or release tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jdpanderson/cheesecloth
-          ref: ${{ needs.pin.outputs.commit }}
+          ref: ${{ needs.pin.outputs.ref }}
           path: cheesecloth
           sparse-checkout: docs
           persist-credentials: false
@@ -184,7 +251,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jdpanderson/cheesecloth
-          ref: ${{ needs.pin.outputs.commit }}
+          ref: ${{ needs.pin.outputs.ref }}
           path: cheesecloth
           sparse-checkout: docs
           persist-credentials: false
@@ -237,7 +304,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jdpanderson/cheesecloth
-          ref: ${{ needs.pin.outputs.commit }}
+          ref: ${{ needs.pin.outputs.ref }}
           path: cheesecloth
           sparse-checkout: docs
           persist-credentials: false

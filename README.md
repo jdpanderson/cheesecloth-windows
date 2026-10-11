@@ -105,13 +105,13 @@ and cluster state; delete it to forget the node. Leave the cluster first with
 
 ## Building and releasing
 
-CI (`.github/workflows/ci.yml`) builds `cheesecloth.exe` at the pinned
-commit in the `binary` job. The `installer` job then builds and checks the
-installers: `build.ps1` builds one, and `check.ps1` installs, upgrades,
-reinstalls and uninstalls it on the runner.
+In CI (`.github/workflows/ci.yml`), the `binary` job gets the pinned
+`cheesecloth.exe` (see [the pin file](#the-pin-file)). The `installer` job
+then builds and checks the installers: `build.ps1` builds one, and
+`check.ps1` installs, upgrades, reinstalls and uninstalls it on the runner.
 
 To build one by hand, with Inno Setup on PATH and a cheesecloth checkout
-beside this one, at the commit that built the exe:
+beside this one, at the commit or tag of the exe:
 
 ```powershell
 .\build.ps1 -Arch x64 -Exe ..\cheesecloth\target\release\cheesecloth.exe -Source ..\cheesecloth
@@ -122,17 +122,10 @@ beside this one, at the commit that built the exe:
 `cheesecloth.pin` names what the installer packages. It is TOML, in the
 format that "Contracts" in cheesecloth's
 [docs/REPOSITORIES.md](https://github.com/jdpanderson/cheesecloth/blob/main/docs/REPOSITORIES.md#contracts)
-defines. Today it names a commit:
+defines. It has two forms.
 
-```toml
-commit = "<40-character commit id>"
-```
-
-CI checks out cheesecloth at that commit, builds the binary from source, and
-takes the README, LICENSE, notices and docs from the same checkout.
-
-When cheesecloth releases attach binaries, the pin names a release and the
-SHA-256 of each Windows binary, and CI will download and check them:
+A release of cheesecloth, with the SHA-256 of each Windows binary. Copy them
+from the release's `SHA256SUMS`:
 
 ```toml
 release = "0.4.0"
@@ -141,9 +134,21 @@ x86_64-pc-windows-msvc = "<sha-256>"
 aarch64-pc-windows-msvc = "<sha-256>"
 ```
 
-CI does not read this form yet; the `pin` job fails on it. Before a package release, the pin must name a
-release. For work that spans both repositories, change cheesecloth first and
-merge it, then pin that commit here.
+CI downloads `cheesecloth-<release>-<target>.exe` from the release and fails
+if its SHA-256 differs from the pin. The release does not hold the README,
+LICENSE, notices and docs that the installer ships, so CI takes them from
+the tag `v<release>` of cheesecloth. It builds no Rust.
+
+A commit of cheesecloth, for work that spans both repositories:
+
+```toml
+commit = "<40-character commit id>"
+```
+
+CI checks out cheesecloth at that commit, builds the binary from source, and
+takes the README, LICENSE, notices and docs from the same checkout. Change
+cheesecloth first and merge it, then pin that commit here. Before a package
+release, the pin must name a release again.
 
 Before a release, run the installer from the last CI run of `main` once on a
 Windows machine with its wizard: check the pages, the options page, and that
