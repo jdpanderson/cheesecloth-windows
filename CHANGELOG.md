@@ -7,6 +7,10 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.4.0pre0-1] - 2026-10-11
+
+A test pre-release of the installer, for cheesecloth 0.4.0pre0. Unsigned.
+
 ### Added
 
 - A Windows installer for x64 and arm64. It installs cheesecloth with
@@ -19,7 +23,11 @@ names the cheesecloth version it packages plus a package revision, such as
 - The installer takes the service's options from `/CHEESECLOTH_OPTS="..."`
   or its options page, and keeps them across upgrades.
 - A CI job that signs the binary and the installer on a fresh runner, then
-  checks the signed installer on another. It runs on `main` once signing is
-  set up; without it the installers are unsigned.
-- `cheesecloth.pin`, the cheesecloth commit that the installer packages. CI
-  builds the binary from source at that commit.
+  checks the signed installer on another. It runs on `main` and release tags
+  once signing is set up; without it the installers are unsigned.
+- `cheesecloth.pin`, the cheesecloth release that the installer packages,
+  with the SHA-256 of each binary. CI downloads the binaries and checks them.
+  For work that spans repositories it may name a commit, and CI builds from
+  source.
+- Package releases: a tag `v<release>-<revision>` publishes the installers
+  and a `SHA256SUMS` file on this repository's releases.
