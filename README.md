@@ -150,11 +150,30 @@ takes the README, LICENSE, notices and docs from the same checkout. Change
 cheesecloth first and merge it, then pin that commit here. Before a package
 release, the pin must name a release again.
 
-Before a release, run the installer from the last CI run of `main` once on a
-Windows machine with its wizard: check the pages, the options page, and that
-the service runs. A pre-release installer has the version of the final
-release, so installing the final release over it is a normal same-version
-reinstall.
+### Releasing
+
+A package release names the cheesecloth release it packages plus a package
+revision, such as `0.4.0-1` (the revision starts at 1 for each cheesecloth
+release). It is published on this repository's releases.
+
+1. Pin the cheesecloth release in `cheesecloth.pin`, and merge it to `main`.
+2. Run the installer from the last CI run of `main` once on a Windows
+   machine with its wizard: check the pages, the options page, the Retry box
+   while Event Viewer shows cheesecloth's events, and that the service runs.
+3. Add a heading for the package version to CHANGELOG.md, and merge it.
+4. Tag `main` and push the tag:
+   `git tag v0.4.0-1 && git push origin v0.4.0-1`.
+
+For the tag, CI checks that it is `v<pinned release>-<revision>`, runs all
+the checks, and the `release` job attaches
+`cheesecloth-<package version>-windows-<arch>-setup.exe` for each
+architecture and a `SHA256SUMS` file. A pinned release with a suffix, such as
+`0.4.0pre0`, makes a pre-release, which may be unsigned. A full release must
+be signed: the `release` job fails without signing.
+
+The installer's own version is the binary's version, such as `0.4.0`, since
+Windows versions hold only numbers. So installing `0.4.0-1` over a
+`0.4.0pre0` installer is a same-version reinstall.
 
 ### Tools
 
@@ -181,7 +200,7 @@ artifact is `cheesecloth-windows-<arch>-signed`.
 To set it up:
 
 1. Create the environment `signing` (Settings > Environments), and limit its
-   deployment branches to `main`.
+   deployment branches and tags to `main` and `v*`.
 2. Add two secrets to that environment:
    - `WINDOWS_SIGNING_CERT`: the code signing certificate and its private
      key, as a PFX file in base64.
@@ -189,7 +208,8 @@ To set it up:
 3. Add the repository variable `WINDOWS_SIGNING` with the value `true`.
 
 Only jobs that name the environment can read its secrets, and only on
-`main`, so code from a pull request never runs with the key.
+`main` and release tags, so code from a pull request never runs with the
+key.
 
 `sign.ps1` imports the certificate into the runner's certificate store,
 rebuilds the installer with Inno Setup's Sign Tool
