@@ -34,7 +34,7 @@ jobs:
           if ($results) { throw "PSScriptAnalyzer found $(@($results).Count) problems" }
       - name: actionlint
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint"
 
   # Reads the pin once, so the other jobs build and package the same commit.
@@ -105,6 +105,10 @@ jobs:
   installer:
     name: Installer (${{ matrix.arch }})
     needs: [pin, binary]
+    # Explicit, because runs-on comes from the matrix.
+    defaults:
+      run:
+        shell: pwsh
     strategy:
       fail-fast: false
       matrix:
@@ -156,6 +160,9 @@ jobs:
     needs: [pin, binary, installer]
     if: vars.WINDOWS_SIGNING == 'true' && github.ref == 'refs/heads/main'
     environment: signing
+    defaults:
+      run:
+        shell: pwsh
     strategy:
       fail-fast: false
       matrix:
@@ -205,6 +212,9 @@ jobs:
   check-signed:
     name: Check signed installer (${{ matrix.arch }})
     needs: [pin, binary, sign]
+    defaults:
+      run:
+        shell: pwsh
     strategy:
       fail-fast: false
       matrix:
