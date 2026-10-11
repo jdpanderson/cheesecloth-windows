@@ -106,7 +106,8 @@ const
   ERROR_SERVICE_DOES_NOT_EXIST = 1060;
   ERROR_SERVICE_CANNOT_ACCEPT_CTRL = 1061;
   ERROR_SERVICE_NOT_ACTIVE = 1062;
-  DELETE = $00010000;
+  { DELETE, which is the name of a Pascal Script procedure. }
+  DELETE_ACCESS = $00010000;
   FILE_SHARE_ALL = 7;
   OPEN_EXISTING = 3;
   FileDispositionInfo = 4;
@@ -471,7 +472,7 @@ begin
   Exe := ExpandConstant('{app}\cheesecloth.exe');
   if not FileExists(Exe) then
     Exit;
-  F := CreateFile(Exe, DELETE, FILE_SHARE_ALL, 0, OPEN_EXISTING, 0, 0);
+  F := CreateFile(Exe, DELETE_ACCESS, FILE_SHARE_ALL, 0, OPEN_EXISTING, 0, 0);
   if F = -1 then
   begin
     Log('Opening ' + Exe + ' to delete it failed: ' + SysErrorMessage(DLLGetLastError));
