@@ -42,7 +42,8 @@ function WaitUntil([string] $what, [scriptblock] $test, [int] $seconds = 60) {
 }
 
 # Runs the installer silently. It must exit with $expect; else its log is
-# printed.
+# printed, with the cheesecloth processes that still run, which may hold
+# files that Setup could not replace.
 function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0) {
     $log = Join-Path $work "$name.log"
     $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART `"/LOG=$log`" $more"
@@ -50,6 +51,15 @@ function Install([string] $installer, [string] $name, [string] $more = '', [int]
     $process = Start-Process $installer -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne $expect) {
         if (Test-Path $log) { Get-Content $log | Write-Host }
+        $running = @(Get-Process cheesecloth -ErrorAction SilentlyContinue)
+        Write-Host "cheesecloth processes: $($running.Count)"
+        $running | Format-Table Id, StartTime, Path -AutoSize | Out-String | Write-Host
+        $service = TheService
+        if ($service) {
+            Write-Host "the service is $($service.State), process $($service.ProcessId)"
+        } else {
+            Write-Host 'the service does not exist'
+        }
         throw "$installer exited with $($process.ExitCode), not $expect"
     }
 }
