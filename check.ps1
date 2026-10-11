@@ -52,8 +52,9 @@ function Install([string] $installer, [string] $name, [string] $more = '', [int]
     }
 }
 
-# Runs the installed CLI, which must succeed.
-function Cli {
+# Runs the installed CLI, which must succeed. Not named Cli: that is an alias
+# of Clear-Item, and an alias comes before a function.
+function RunCli {
     $out = & $cli @args
     if ($LASTEXITCODE -ne 0) { throw "cheesecloth $args failed with exit code $LASTEXITCODE" }
     $out
@@ -101,7 +102,7 @@ function CheckOptions([string] $opts, [string] $what) {
 }
 
 Write-Host '== Install'
-Install $Setup 'install' '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
+Install $Setup 'install' -More '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
 CheckOptions ' --no-port-mapping --log info' 'the service has the options'
 Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$version.0") 'the installer has the version of the binary'
 foreach ($file in 'cheesecloth.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'unins000.exe') {
@@ -161,7 +162,7 @@ Check ($null -eq (Compare-Object @($who) @($admins, $system))) "only SYSTEM and 
 
 Write-Host '== Lifecycle'
 WaitUntil 'the local API' { $null -ne (Status) }
-Cli init
+RunCli init
 WaitUntil 'userspace WireGuard on cheesecloth0' {
     $s = Status
     $s -and $s.wg_backend -eq 'userspace' -and $s.wg_interface -eq 'cheesecloth0'
@@ -183,7 +184,7 @@ Stop-Process -Id $old -Force
 WaitUntil 'a restart after a crash' {
     $s = TheService
     $s.State -eq 'Running' -and $s.ProcessId -ne 0 -and $s.ProcessId -ne $old
-} 30
+} -Seconds 30
 
 Write-Host '== Upgrade'
 $v = [version]$version
@@ -202,7 +203,7 @@ CheckOptions ' --no-port-mapping --log info' 'the upgrade kept the options'
 WaitUntil 'a member after the upgrade' { $s = Status; $s -and $s.phase -eq 'member' }
 
 Write-Host '== Same-version reinstall'
-Install $upgrade 'reinstall' '/CHEESECLOTH_OPTS='
+Install $upgrade 'reinstall' -More '/CHEESECLOTH_OPTS='
 Check ((TheService).State -eq 'Running') 'the service runs after a reinstall'
 CheckOptions '' 'an empty /CHEESECLOTH_OPTS= cleared the options'
 WaitUntil 'a member after the reinstall' { $s = Status; $s -and $s.phase -eq 'member' }
@@ -212,11 +213,11 @@ Write-Host '== A failing service'
 # service fails, and the SCM restarts it again and again.
 # Each failed start logs the bind error once, as it stops, so a second such
 # error shows a restart.
-Install $upgrade 'failing' '/CHEESECLOTH_OPTS="--bind 192.0.2.1"' 10
+Install $upgrade 'failing' -More '/CHEESECLOTH_OPTS="--bind 192.0.2.1"' -Expect 10
 WaitUntil 'the SCM restarts the failing service' {
     @(Events 2 | Where-Object { $_.Message -like '*binding 192.0.2.1*' }).Count -ge 2
 }
-Install $upgrade 'fixed' '/CHEESECLOTH_OPTS=--no-port-mapping'
+Install $upgrade 'fixed' -More '/CHEESECLOTH_OPTS=--no-port-mapping'
 Check ((TheService).State -eq 'Running') 'a reinstall with good options starts the service'
 CheckRestarts
 WaitUntil 'a member after the fix' { $s = Status; $s -and $s.phase -eq 'member' }
