@@ -2,6 +2,8 @@
 ; It installs the binary, wintun.dll and the docs, adds the folder to the
 ; system PATH, registers the Event Log source, and sets up and starts the
 ; service, as packaging/cheesecloth.service does with systemd.
+; /CHEESECLOTH_OPTS="..." on the command line, or the wizard's options page,
+; sets the daemon's options, as CHEESECLOTH_OPTS does on Linux.
 ;
 ; build.ps1 defines Version, Arch (x64 or arm64) and Stage (the staged files).
 
@@ -123,6 +125,51 @@ function ChangeServiceConfig2(Service: THandle; InfoLevel: DWORD; var Info: DWOR
 var
   { The error that stopped the service setup, if any. }
   ServiceError: String;
+  OptsPage: TInputQueryWizardPage;
+
+{ The value of /CHEESECLOTH_OPTS= on the command line, if it is there. An
+  empty value is a value: it clears the options. }
+function CommandLineOpts(var Opts: String): Boolean;
+var
+  Prefix: String;
+  I: Integer;
+begin
+  Prefix := '/CHEESECLOTH_OPTS=';
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(Copy(ParamStr(I), 1, Length(Prefix)), Prefix) = 0 then
+    begin
+      Opts := Copy(ParamStr(I), Length(Prefix) + 1, Length(ParamStr(I)));
+      Result := True;
+    end;
+end;
+
+{ The options for `cheesecloth daemon`: from the command line, else from the
+  last install, else none. Silent installs skip the page and keep them. }
+procedure InitializeWizard;
+var
+  Opts: String;
+begin
+  OptsPage := CreateInputQueryPage(wpSelectDir, 'Service options',
+    'Options for the cheesecloth service.',
+    'The service runs "cheesecloth daemon" with these options, for example ' +
+    '--no-port-mapping --name office-pc. See "cheesecloth daemon --help". ' +
+    'Leave it empty for the defaults.');
+  OptsPage.Add('&Options:', False);
+  if not CommandLineOpts(Opts) then
+    Opts := GetPreviousData('Options', '');
+  OptsPage.Values[0] := Opts;
+end;
+
+function DaemonOpts: String;
+begin
+  Result := Trim(OptsPage.Values[0]);
+end;
+
+procedure RegisterPreviousData(PreviousDataKey: Integer);
+begin
+  SetPreviousData(PreviousDataKey, 'Options', DaemonOpts);
+end;
 
 { Whether Path, one entry of PATH, names the install folder. }
 function IsAppPath(Path: String): Boolean;
@@ -359,10 +406,13 @@ end;
 { Creates or updates the service, then starts it and waits until it runs. }
 procedure SetUpService;
 var
-  Config: String;
+  Command, Config: String;
 begin
-  Config := ' binPath= ' + SysArg('"' + ExpandConstant('{app}\cheesecloth.exe') + '" daemon') +
-    ' start= auto obj= LocalSystem DisplayName= ' + ServiceName;
+  Command := '"' + ExpandConstant('{app}\cheesecloth.exe') + '" daemon';
+  if DaemonOpts <> '' then
+    Command := Command + ' ' + DaemonOpts;
+  Config := ' binPath= ' + SysArg(Command) + ' start= auto obj= LocalSystem DisplayName= ' +
+    ServiceName;
   if ServiceState = 0 then
     Sc('create ' + ServiceName + Config)
   else

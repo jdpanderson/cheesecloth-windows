@@ -1,7 +1,7 @@
 # Checks a Windows installer on this machine: it installs it, checks what it
 # installed, runs the service through its lifecycle, upgrades, reinstalls the
-# same version and uninstalls. For CI: it needs an elevated shell, and it
-# changes the machine. It stops at the first failure.
+# same version, fixes a failing service and uninstalls. For CI: it needs an
+# elevated shell, and it changes the machine. It stops at the first failure.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Setup,
@@ -38,15 +38,16 @@ function WaitUntil([string] $what, [scriptblock] $test, [int] $seconds = 60) {
     Write-Host "ok: $what"
 }
 
-# Runs the installer silently. It must exit with 0; else its log is printed.
-function Install([string] $installer, [string] $name, [string] $more = '') {
+# Runs the installer silently. It must exit with $expect; else its log is
+# printed.
+function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0) {
     $log = Join-Path $work "$name.log"
     $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART `"/LOG=$log`" $more"
     Write-Host "running $installer $arguments"
     $process = Start-Process $installer -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
+    if ($process.ExitCode -ne $expect) {
         if (Test-Path $log) { Get-Content $log | Write-Host }
-        throw "$installer exited with $($process.ExitCode)"
+        throw "$installer exited with $($process.ExitCode), not $expect"
     }
 }
 
@@ -93,8 +94,14 @@ $version = (& $Exe --version) -replace '^cheesecloth ', ''
 if ($LASTEXITCODE -ne 0) { throw "$Exe --version failed" }
 New-Item -ItemType Directory -Force $work | Out-Null
 
+function CheckOptions([string] $opts, [string] $what) {
+    $command = "`"$cli`" daemon$opts"
+    Check ((TheService).PathName -eq $command) "$what ($command)"
+}
+
 Write-Host '== Install'
-Install $Setup 'install'
+Install $Setup 'install' '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
+CheckOptions ' --no-port-mapping --log info' 'the service has the options'
 Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$version.0") 'the installer has the version of the binary'
 foreach ($file in 'cheesecloth.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\DESIGN.md', 'unins000.exe') {
     Check (Test-Path (Join-Path $app $file)) "$file is installed"
@@ -118,18 +125,23 @@ try {
 }
 Check ($found -eq $cli) 'cheesecloth runs from the machine PATH'
 
+# The installer's service setup that stopping the service undoes.
+function CheckRestarts {
+    Check ((TheService).StartMode -eq 'Auto') 'the service starts automatically'
+    $failure = sc.exe qfailure cheesecloth | Out-String
+    if ($LASTEXITCODE -ne 0) { throw 'sc.exe qfailure failed' }
+    Check ($failure -match 'RESET_PERIOD \(in seconds\)\s*:\s*86400') 'failures are counted for one day'
+    Check ([regex]::Matches($failure, 'RESTART -- Delay = 5000 milliseconds').Count -eq 3) 'the service restarts 3 times after 5 s'
+    $flag = sc.exe qfailureflag cheesecloth | Out-String
+    if ($LASTEXITCODE -ne 0) { throw 'sc.exe qfailureflag failed' }
+    Check ($flag -match 'FAILURE_ACTIONS_ON_NONCRASH_FAILURES\s*:\s*TRUE') 'a daemon error restarts the service too'
+}
+
 $service = TheService
-Check ($service.StartMode -eq 'Auto') 'the service starts automatically'
 Check ($service.StartName -eq 'LocalSystem') 'the service runs as LocalSystem'
 Check ($service.State -eq 'Running') 'the service runs'
 Check ($service.Description -eq 'cheesecloth peer-to-peer WireGuard mesh') 'the service has its description'
-$failure = sc.exe qfailure cheesecloth | Out-String
-if ($LASTEXITCODE -ne 0) { throw 'sc.exe qfailure failed' }
-Check ($failure -match 'RESET_PERIOD \(in seconds\)\s*:\s*86400') 'failures are counted for one day'
-Check ([regex]::Matches($failure, 'RESTART -- Delay = 5000 milliseconds').Count -eq 3) 'the service restarts 3 times after 5 s'
-$flag = sc.exe qfailureflag cheesecloth | Out-String
-if ($LASTEXITCODE -ne 0) { throw 'sc.exe qfailureflag failed' }
-Check ($flag -match 'FAILURE_ACTIONS_ON_NONCRASH_FAILURES\s*:\s*TRUE') 'a daemon error restarts the service too'
+CheckRestarts
 $preshutdown = Get-ItemPropertyValue 'HKLM:\SYSTEM\CurrentControlSet\Services\cheesecloth' 'PreshutdownTimeout'
 Check ($preshutdown -eq 30000) 'the pre-shutdown timeout is 30 s'
 
@@ -185,12 +197,28 @@ Check ($entries.Count -eq 1) 'the upgrade replaced the old install'
 Check ($entries[0].GetValue('DisplayVersion') -eq $next) 'the Uninstall entry has the new version'
 $service = TheService
 Check ($service.State -eq 'Running' -and $service.ProcessId -ne $old) 'the upgrade restarted the service'
+CheckOptions ' --no-port-mapping --log info' 'the upgrade kept the options'
 WaitUntil 'a member after the upgrade' { $s = Status; $s -and $s.phase -eq 'member' }
 
 Write-Host '== Same-version reinstall'
-Install $upgrade 'reinstall'
+Install $upgrade 'reinstall' '/CHEESECLOTH_OPTS='
 Check ((TheService).State -eq 'Running') 'the service runs after a reinstall'
+CheckOptions '' 'an empty /CHEESECLOTH_OPTS= cleared the options'
 WaitUntil 'a member after the reinstall' { $s = Status; $s -and $s.phase -eq 'member' }
+
+Write-Host '== A failing service'
+# The daemon cannot bind to an address that the machine does not have. So the
+# service fails, and the SCM restarts it again and again.
+# Each failed start logs the bind error once, as it stops, so a second such
+# error shows a restart.
+Install $upgrade 'failing' '/CHEESECLOTH_OPTS="--bind 192.0.2.1"' 10
+WaitUntil 'the SCM restarts the failing service' {
+    @(Events 2 | Where-Object { $_.Message -like '*binding 192.0.2.1*' }).Count -ge 2
+}
+Install $upgrade 'fixed' '/CHEESECLOTH_OPTS=--no-port-mapping'
+Check ((TheService).State -eq 'Running') 'a reinstall with good options starts the service'
+CheckRestarts
+WaitUntil 'a member after the fix' { $s = Status; $s -and $s.phase -eq 'member' }
 
 Write-Host '== Uninstall'
 $quiet = Get-ItemPropertyValue $uninstallKey 'QuietUninstallString'
