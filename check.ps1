@@ -83,14 +83,22 @@ function TheService {
     Get-CimInstance Win32_Service -Filter "Name = 'cheesecloth'"
 }
 
-function Events([int] $level) {
-    Get-WinEvent -FilterHashtable @{
-        LogName = 'Application'; ProviderName = 'cheesecloth'; Level = $level; StartTime = $since
-    } -ErrorAction SilentlyContinue
+# The messages of cheesecloth's events at $level since the start, one string
+# for each event ('' if it has no message). A child process reads them:
+# reading a message loads cheesecloth.exe, the source's message file, and the
+# reader holds it for a while, so Setup could not replace it.
+function EventMessages([int] $level) {
+    pwsh -NoProfile -NonInteractive -Command {
+        param([int] $level, [datetime] $since)
+        Get-WinEvent -FilterHashtable @{
+            LogName = 'Application'; ProviderName = 'cheesecloth'; Level = $level; StartTime = $since
+        } -ErrorAction SilentlyContinue | ForEach-Object { [string] $_.Message }
+    } -args $level, $since
+    if ($LASTEXITCODE -ne 0) { throw "reading the Event Log failed with exit code $LASTEXITCODE" }
 }
 
 function HasEvent([int] $level, [string] $text) {
-    @(Events $level | Where-Object { $_.Message -like "*$text*" }).Count -gt 0
+    @(EventMessages $level | Where-Object { $_ -like "*$text*" }).Count -gt 0
 }
 
 # The machine type in a PE file's header.
@@ -188,7 +196,7 @@ $service = TheService
 Check ($service.State -eq 'Stopped') 'Stop-Service stops the service'
 Check ($service.ExitCode -eq 0) 'the service stopped with exit code 0'
 Check (HasEvent 4 'shutting down') 'the shutdown is in the Event Log'
-Check (@(Events 2).Count -eq 0) 'the Event Log has no errors'
+Check (@(EventMessages 2).Count -eq 0) 'the Event Log has no errors'
 
 Start-Service cheesecloth
 WaitUntil 'a member after Start-Service' { $s = Status; $s -and $s.phase -eq 'member' }
@@ -229,12 +237,39 @@ Write-Host '== A failing service'
 # error shows a restart.
 Install $upgrade 'failing' -More '/CHEESECLOTH_OPTS="--bind 192.0.2.1"' -Expect 10
 WaitUntil 'the SCM restarts the failing service' {
-    @(Events 2 | Where-Object { $_.Message -like '*binding 192.0.2.1*' }).Count -ge 2
+    @(EventMessages 2 | Where-Object { $_ -like '*binding 192.0.2.1*' }).Count -ge 2
 }
 Install $upgrade 'fixed' -More '/CHEESECLOTH_OPTS=--no-port-mapping'
 Check ((TheService).State -eq 'Running') 'a reinstall with good options starts the service'
 CheckRestarts
 WaitUntil 'a member after the fix' { $s = Status; $s -and $s.phase -eq 'member' }
+
+Write-Host '== cheesecloth.exe in use'
+# A program that shows cheesecloth's events, such as Event Viewer, loads
+# cheesecloth.exe as a resource file, as this does. Setup must stop before it
+# changes any file.
+Add-Type -Namespace Check -Name Kernel32 -MemberDefinition @'
+[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool FreeLibrary(IntPtr module);
+'@
+# LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
+$module = [Check.Kernel32]::LoadLibraryExW($cli, [IntPtr]::Zero, 0x22)
+if ($module -eq [IntPtr]::Zero) {
+    throw "loading cheesecloth.exe failed: error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+}
+try {
+    Install $upgrade 'in-use' -Expect 7
+    $log = Join-Path $work 'in-use.log'
+    Check (Select-String -Path $log -Pattern 'cheesecloth.exe is in use' -SimpleMatch -Quiet) 'Setup says that cheesecloth.exe is in use'
+} finally {
+    if (-not [Check.Kernel32]::FreeLibrary($module)) { throw 'FreeLibrary failed' }
+}
+Install $upgrade 'released'
+Check ((TheService).State -eq 'Running') 'Setup succeeds once cheesecloth.exe is free'
+CheckRestarts
+WaitUntil 'a member after the release' { $s = Status; $s -and $s.phase -eq 'member' }
 
 Write-Host '== Uninstall'
 $quiet = Get-ItemPropertyValue $uninstallKey 'QuietUninstallString'

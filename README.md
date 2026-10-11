@@ -35,7 +35,7 @@ For a silent install, run it from an elevated shell:
 | Code | Meaning |
 | --- | --- |
 | 0 | Installed, and the service runs. |
-| 7 | The service could not be stopped. No files have changed. |
+| 7 | The service could not be stopped, or `cheesecloth.exe` is in use (see [Weak points](#weak-points)). No files have changed. |
 | 10 | The files are installed, but the service could not be set up or did not start. The log and the Event Log say why. |
 
 Other codes are [Inno Setup's](https://jrsoftware.org/ishelp/topic_setupexitcodes.htm).
@@ -90,6 +90,12 @@ and cluster state; delete it to forget the node. Leave the cluster first with
   Viewer holds the service open, an uninstall marks it for deletion, and
   Windows removes it only when that program closes it. An install in that
   time fails with error 1072.
+- **Event Viewer blocks an upgrade.** Windows reads the text of cheesecloth's
+  events from `cheesecloth.exe`. While a program shows those events, such as
+  Event Viewer or `Get-WinEvent` in an open PowerShell, it holds the file,
+  and Setup cannot replace it. Setup then stops with exit code 7 before it
+  changes any file, and the service stays stopped and disabled. Close the
+  program and run Setup again.
 - **Old events lose their text** after an uninstall, because the Event Log
   source is removed.
 - **No MSI.** Group Policy and Intune MSI deployment are not possible. Run the

@@ -12,6 +12,9 @@ names the cheesecloth version it packages plus a package revision, such as
 - A Windows installer for x64 and arm64. It installs cheesecloth with
   `wintun.dll`, adds it to the system PATH, and sets up and starts the
   service. CI checks it by installing, upgrading and uninstalling it.
+- Setup stops with exit code 7, before it changes any file, when
+  `cheesecloth.exe` is in use, for example by Event Viewer showing
+  cheesecloth's events.
 - The installer takes the service's options from `/CHEESECLOTH_OPTS="..."`
   or its options page, and keeps them across upgrades.
 - A CI job that signs the binary and the installer on a fresh runner, then

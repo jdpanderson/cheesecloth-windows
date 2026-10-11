@@ -106,6 +106,10 @@ const
   ERROR_SERVICE_DOES_NOT_EXIST = 1060;
   ERROR_SERVICE_CANNOT_ACCEPT_CTRL = 1061;
   ERROR_SERVICE_NOT_ACTIVE = 1062;
+  DELETE = $00010000;
+  FILE_SHARE_ALL = 7;
+  OPEN_EXISTING = 3;
+  FileDispositionInfo = 4;
 
 type
   TServiceStatus = record
@@ -133,6 +137,18 @@ function ControlService(Service: THandle; Control: DWORD; var Status: TServiceSt
 { Info is a SERVICE_PRESHUTDOWN_INFO, which holds one DWORD. }
 function ChangeServiceConfig2(Service: THandle; InfoLevel: DWORD; var Info: DWORD): BOOL;
   external 'ChangeServiceConfig2W@advapi32.dll stdcall';
+
+{ What ExeInUse needs. The file handle is an Int64, not a THandle, so that
+  INVALID_HANDLE_VALUE is -1. Info is a FILE_DISPOSITION_INFO, which holds
+  one BOOLEAN. }
+function CreateFile(FileName: String; Access, ShareMode: DWORD; Security: Int64;
+  Disposition, Flags: DWORD; Template: Int64): Int64;
+  external 'CreateFileW@kernel32.dll stdcall';
+function SetFileInformationByHandle(F: Int64; InfoClass: Integer; var Info: Byte;
+  Size: DWORD): BOOL;
+  external 'SetFileInformationByHandle@kernel32.dll stdcall';
+function CloseHandle(Handle: Int64): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
 
 var
   { The error that stopped the service setup, if any. }
@@ -440,6 +456,48 @@ begin
   WaitUntilRunning;
 end;
 
+{ Whether the installed cheesecloth.exe cannot be deleted, as Setup must do
+  to replace it. It does what DeleteFile does: it opens the file and marks it
+  for deletion. Then it clears the mark, so the file is not deleted. A
+  program that shows cheesecloth's events, such as Event Viewer, holds the
+  file, because the Event Log source reads its messages from it. }
+function ExeInUse: Boolean;
+var
+  Exe: String;
+  F: Int64;
+  Mark: Byte;
+begin
+  Result := False;
+  Exe := ExpandConstant('{app}\cheesecloth.exe');
+  if not FileExists(Exe) then
+    Exit;
+  F := CreateFile(Exe, DELETE, FILE_SHARE_ALL, 0, OPEN_EXISTING, 0, 0);
+  if F = -1 then
+  begin
+    Log('Opening ' + Exe + ' to delete it failed: ' + SysErrorMessage(DLLGetLastError));
+    Result := True;
+    Exit;
+  end;
+  try
+    Mark := 1;
+    if not SetFileInformationByHandle(F, FileDispositionInfo, Mark, 1) then
+    begin
+      Log('Marking ' + Exe + ' for deletion failed: ' + SysErrorMessage(DLLGetLastError));
+      Result := True;
+    end
+    else
+    begin
+      Mark := 0;
+      if not SetFileInformationByHandle(F, FileDispositionInfo, Mark, 1) then
+        RaiseException('Clearing the deletion mark of ' + Exe + ' failed: ' +
+          SysErrorMessage(DLLGetLastError));
+    end;
+  finally
+    CloseHandle(F);
+  end;
+end;
+
+{ A failure here makes Setup exit with code 7 before it changes any file. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
@@ -447,7 +505,11 @@ begin
     StopService;
   except
     Result := 'The cheesecloth service could not be stopped: ' + GetExceptionMessage;
+    Exit;
   end;
+  if ExeInUse then
+    Result := 'cheesecloth.exe is in use, for example by Event Viewer showing ' +
+      'cheesecloth''s events. Close it and run Setup again.';
 end;
 
 { Inno has no rollback for this step, so a failure keeps the installed files
