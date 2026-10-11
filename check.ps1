@@ -2,6 +2,8 @@
 # installed, runs the service through its lifecycle, upgrades, reinstalls the
 # same version, fixes a failing service and uninstalls. For CI: it needs an
 # elevated shell, and it changes the machine. It stops at the first failure.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+    Justification = 'It reports progress to the console and the CI log.')]
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Setup,

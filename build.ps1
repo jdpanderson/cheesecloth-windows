@@ -1,6 +1,8 @@
 # Builds the Windows installer from a built cheesecloth.exe:
 # <OutDir>\cheesecloth-<version>-windows-<arch>-setup.exe. Needs Inno Setup
 # 7.1 or later, with ISCC.exe on PATH. The version comes from the binary.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+    Justification = 'It reports progress to the console and the CI log.')]
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,

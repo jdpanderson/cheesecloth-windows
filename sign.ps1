@@ -4,6 +4,10 @@
 # WINDOWS_SIGNING_PASSWORD come from the environment. It never runs
 # cheesecloth.exe, so CI runs it after check.ps1 and no secret is present
 # while cargo or our binary runs.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+    Justification = 'It reports progress to the console and the CI log.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '',
+    Justification = 'WINDOWS_SIGNING_PASSWORD comes from a CI secret as plain text, and Import-PfxCertificate needs a SecureString.')]
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [ValidateSet('x64', 'arm64')] [string] $Arch,
