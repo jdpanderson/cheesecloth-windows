@@ -41,8 +41,8 @@ function WaitUntil([string] $what, [scriptblock] $test, [int] $seconds = 60) {
     Write-Host "ok: $what"
 }
 
-# Runs the installer silently. $during runs while it runs, with the path of
-# its log. It must exit with $expect; else its log is printed, with the
+# Runs the installer silently, with its log in $work\$name.log. $during runs
+# while it runs. It must exit with $expect; else its log is printed, with the
 # cheesecloth processes that still run, which may hold files that Setup could
 # not replace.
 function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0,
@@ -53,7 +53,7 @@ function Install([string] $installer, [string] $name, [string] $more = '', [int]
     $process = Start-Process $installer -ArgumentList $arguments -PassThru
     # Without an open handle, the exit code is lost when the process exits.
     $null = $process.Handle
-    & $during $log
+    & $during
     $process.WaitForExit()
     if ($process.ExitCode -ne $expect) {
         if (Test-Path $log) { Get-Content $log | Write-Host }
@@ -104,6 +104,9 @@ function EventMessages([int] $level) {
         } catch {
             if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound,*') { throw }
         }
+        # A caught error still sets the exit code to 1; any other error has
+        # been thrown by now.
+        exit 0
     } -args $level, $since
     if ($LASTEXITCODE -ne 0) { throw "reading the Event Log failed with exit code $LASTEXITCODE" }
 }
@@ -291,9 +294,9 @@ Check (Select-String -Path $log -Pattern 'Close that program and run Setup again
 # Released while Setup waits: Setup goes on.
 $module = HoldExe
 $held = $true
+$log = Join-Path $work 'released.log'
 try {
     Install $upgrade 'released' -During {
-        param($log)
         WaitUntil 'Setup finds cheesecloth.exe in use' {
             (Test-Path $log) -and (Select-String -Path $log -Pattern 'cheesecloth.exe is in use:' -SimpleMatch -Quiet)
         } -Seconds 30
