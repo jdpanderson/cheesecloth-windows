@@ -17,5 +17,5 @@ names the cheesecloth version it packages plus a package revision, such as
 - A CI job that signs the binary and the installer on a fresh runner, then
   checks the signed installer on another. It runs on `main` once signing is
   set up; without it the installers are unsigned.
-- `cheesecloth.json`, the cheesecloth commit that the installer packages. CI
+- `cheesecloth.pin`, the cheesecloth commit that the installer packages. CI
   builds the binary from source at that commit.

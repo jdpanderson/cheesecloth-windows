@@ -111,24 +111,29 @@ beside this one, at the commit that built the exe:
 
 ### The pin file
 
-`cheesecloth.json` names the cheesecloth commit that the installer packages:
+`cheesecloth.pin` names what the installer packages. It is TOML, in the
+format that "Contracts" in cheesecloth's
+[docs/REPOSITORIES.md](https://github.com/jdpanderson/cheesecloth/blob/main/docs/REPOSITORIES.md#contracts)
+defines. Today it names a commit:
 
-```json
-{ "commit": "<full commit SHA-1>" }
+```toml
+commit = "<40-character commit id>"
 ```
 
 CI checks out cheesecloth at that commit, builds the binary from source, and
 takes the README, LICENSE, notices and docs from the same checkout.
 
-When cheesecloth releases attach a binary for each target, the pin will name
-a release and the SHA-256 of each binary in place of the commit, and CI will
-download and check them:
+When cheesecloth releases attach binaries, the pin names a release and the
+SHA-256 of each Windows binary, and CI will download and check them:
 
-```json
-{ "release": "v0.4.0", "sha256": { "x64": "<sha256>", "arm64": "<sha256>" } }
+```toml
+release = "0.4.0"
+[sha256]
+x86_64-pc-windows-msvc = "<sha-256>"
+aarch64-pc-windows-msvc = "<sha-256>"
 ```
 
-CI does not read this form yet. Before a package release, the pin must name a
+CI does not read this form yet; the `pin` job fails on it. Before a package release, the pin must name a
 release. For work that spans both repositories, change cheesecloth first and
 merge it, then pin that commit here.
 

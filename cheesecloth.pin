@@ -1,0 +1,3 @@
+# What the installer packages. The format is in "Contracts" in
+# docs/REPOSITORIES.md of cheesecloth.
+commit = "38f056a4c6c5dab1d8ed318184401dcb94510bdf"

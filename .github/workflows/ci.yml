@@ -50,19 +50,23 @@ jobs:
           persist-credentials: false
       # Until cheesecloth releases attach binaries, the pin names a commit,
       # and CI builds the binary from source. See README.md.
-      - name: Read cheesecloth.json
+      - name: Read cheesecloth.pin
         id: pin
+        shell: python3 -I {0}
         run: |
-          if ! jq -e 'keys == ["commit"]' cheesecloth.json > /dev/null; then
-            echo "::error::cheesecloth.json must hold only \"commit\""
-            exit 1
-          fi
-          commit=$(jq -r .commit cheesecloth.json)
-          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::the commit in cheesecloth.json is not a full SHA-1: $commit"
-            exit 1
-          fi
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          import os, re, sys, tomllib
+
+          with open("cheesecloth.pin", "rb") as f:
+              pin = tomllib.load(f)
+          if "release" in pin:
+              sys.exit("::error::CI cannot download release binaries yet; pin a commit")
+          if pin.keys() != {"commit"}:
+              sys.exit(f"::error::cheesecloth.pin must hold only commit, not {sorted(pin)}")
+          commit = pin["commit"]
+          if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+              sys.exit(f"::error::the commit in cheesecloth.pin is not a full commit id: {commit!r}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"commit={commit}\n")
 
   # Builds cheesecloth.exe at the pinned commit. The tests run in
   # cheesecloth's own CI.

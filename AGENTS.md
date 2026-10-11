@@ -34,7 +34,7 @@ The agent works without permission prompts where it can:
 - It holds the Windows installer for
   [cheesecloth](https://github.com/jdpanderson/cheesecloth). The app, its
   service code and its docs live there; see its `docs/REPOSITORIES.md`.
-- `cheesecloth.json` pins the cheesecloth commit or release that the
+- `cheesecloth.pin` pins the cheesecloth commit or release that the
   installer packages. See [README.md](README.md#the-pin-file).
 - For work that also changes cheesecloth, change and merge it there first,
   then move the pin here.
