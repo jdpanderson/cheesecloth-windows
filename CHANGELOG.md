@@ -7,6 +7,10 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.4.0-2] - 2026-10-11
+
+The installer for cheesecloth 0.4.0, signed with a self-signed certificate.
+
 ### Added
 
 - The installers are signed with a self-signed certificate, `signing.cer`.
