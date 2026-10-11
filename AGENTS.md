@@ -52,8 +52,9 @@ locally, so push a branch and open a pull request to run them.
 - **Installer:** builds the installer for x64 and arm64, then `check.ps1`
   installs, upgrades, reinstalls and uninstalls it on the runner.
 - **Sign** and **Check signed installer:** only on `main` and release tags
-  once signing is set up. They sign on a fresh runner, then run `check.ps1`
-  on the signed installer on another.
+  once signing is set up. They sign on a fresh runner, then run `verify.ps1`
+  and `check.ps1` on the signed installer on another. `verify.ps1` checks
+  that the signature is valid and made with the self-signed `signing.cer`.
 - **Publish release:** only for a tag `v<release>-<revision>`. It attaches
   the installers and `SHA256SUMS` to a release here. Pushing a tag publishes,
   so ask first.

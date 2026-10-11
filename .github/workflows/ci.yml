@@ -324,8 +324,7 @@ jobs:
       - name: Check signed installer
         run: |
           $setup = (Get-Item dist/*-setup.exe).FullName
-          $status = (Get-AuthenticodeSignature $setup).Status
-          if ($status -ne 'Valid') { throw "the signature of $setup is $status" }
+          ./verify.ps1 -File $setup
           ./check.ps1 -Setup $setup -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
 
   # Publishes a package release for a tag v<release>-<revision>, after every

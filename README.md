@@ -49,6 +49,21 @@ state files of a newer one.
 The installer also sets the service's restart on failure (after 5 seconds)
 and gives the daemon 30 seconds to stop at system shutdown.
 
+### Checking the signature
+
+Released installers are signed with a self-signed certificate,
+[signing.cer](signing.cer), so Windows shows "Unknown publisher" and
+SmartScreen warns. To check that an installer is ours, compare its signer's
+thumbprint with this one:
+
+```powershell
+(Get-AuthenticodeSignature .\cheesecloth-0.4.0-2-windows-x64-setup.exe).SignerCertificate.Thumbprint
+# AC61BEBCAE766B97263499EDFE7968112406EB7B
+```
+
+Do not add the certificate to your trusted root certificates: Windows would
+then trust it for more than this installer.
+
 ## Changing options
 
 The service runs `cheesecloth daemon` with the options from the installer. To
@@ -100,6 +115,9 @@ and cluster state; delete it to forget the node. Leave the cluster first with
   succeeds.
 - **Old events lose their text** after an uninstall, because the Event Log
   source is removed.
+- **Self-signed.** The installers are signed, but not with a certificate
+  that Windows trusts, so SmartScreen warns. See
+  [Checking the signature](#checking-the-signature).
 - **No MSI.** Group Policy and Intune MSI deployment are not possible. Run the
   silent install from a script, or use Intune's Win32 app type.
 
@@ -194,20 +212,37 @@ Windows versions hold only numbers. So installing `0.4.0-1` over a
 The `sign` job signs `cheesecloth.exe`, the uninstaller and the installer.
 It runs on a fresh runner after the `installer` job passes, because that job
 ran our binary as a service, so its runner is not trusted with the key. The
-`sign` job never runs cargo or our binary. Then the `check-signed` job runs
-`check.ps1` on the signed installer, on another fresh runner without the
-secrets, so the installer that ships is the one that was checked. Its
-artifact is `cheesecloth-windows-<arch>-signed`.
+`sign` job never runs cargo or our binary. Then the `check-signed` job checks
+the signature with `verify.ps1` and runs `check.ps1` on the signed installer,
+on another fresh runner without the secrets, so the installer that ships is
+the one that was checked. Its artifact is `cheesecloth-windows-<arch>-signed`.
 
-To set it up:
+The certificate is self-signed, and its public part is
+[signing.cer](signing.cer). Public certificate authorities issue code signing
+certificates only with the key on a hardware token or in a cloud service, so
+none fits the PFX secret below. To set it up:
 
-1. Create the environment `signing` (Settings > Environments), and limit its
+1. Make the certificate and its PFX file, outside any repository:
+
+   ```sh
+   openssl req -x509 -newkey rsa:3072 -sha256 -days 1825 -nodes \
+     -subj "/CN=cheesecloth" \
+     -addext "keyUsage=critical,digitalSignature" \
+     -addext "extendedKeyUsage=codeSigning" \
+     -keyout signing.key -out signing.cer
+   openssl pkcs12 -export -inkey signing.key -in signing.cer -out signing.pfx
+   ```
+
+2. Commit `signing.cer`, and put its thumbprint
+   (`openssl x509 -in signing.cer -noout -fingerprint -sha1`, without the
+   colons) in [Checking the signature](#checking-the-signature). Keep
+   `signing.key` and `signing.pfx` offline.
+3. Create the environment `signing` (Settings > Environments), and limit its
    deployment branches and tags to `main` and `v*`.
-2. Add two secrets to that environment:
-   - `WINDOWS_SIGNING_CERT`: the code signing certificate and its private
-     key, as a PFX file in base64.
+4. Add two secrets to that environment:
+   - `WINDOWS_SIGNING_CERT`: `signing.pfx` in base64.
    - `WINDOWS_SIGNING_PASSWORD`: the PFX file's password.
-3. Add the repository variable `WINDOWS_SIGNING` with the value `true`.
+5. Add the repository variable `WINDOWS_SIGNING` with the value `true`.
 
 Only jobs that name the environment can read its secrets, and only on
 `main` and release tags, so code from a pull request never runs with the
@@ -215,11 +250,14 @@ key.
 
 `sign.ps1` imports the certificate into the runner's certificate store,
 rebuilds the installer with Inno Setup's Sign Tool
-(`signtool sign /sha1 <thumbprint> /fd SHA256 /tr <timestamp server>`), checks
-that both signatures are valid, and removes the certificate. A rebuild is
-needed because Inno signs the uninstaller while it compiles.
+(`signtool sign /sha1 <thumbprint> /fd SHA256 /tr <timestamp server>`), and
+removes the certificate. A rebuild is needed because Inno signs the
+uninstaller while it compiles. Then `verify.ps1` checks that `cheesecloth.exe`
+and the installer have valid signatures made with `signing.cer`. Windows does
+not trust a self-signed certificate, so `verify.ps1` adds it to the machine's
+trusted root certificates for the check only. This needs an administrator.
 
-A certificate on a hardware key or in a cloud signing service needs only a
+A certificate on a hardware key or in a cloud signing service needs a
 different signing command in `sign.ps1`.
 
 Without the variable, the `sign` and `check-signed` jobs are skipped, and the
