@@ -58,7 +58,7 @@ thumbprint with this one:
 
 ```powershell
 (Get-AuthenticodeSignature .\cheesecloth-0.4.0-2-windows-x64-setup.exe).SignerCertificate.Thumbprint
-# AC61BEBCAE766B97263499EDFE7968112406EB7B
+# CDC17DEA8996C8A850D85815FA9DF8C281A26C00
 ```
 
 Do not add the certificate to your trusted root certificates: Windows would
@@ -227,11 +227,16 @@ none fits the PFX secret below. To set it up:
    ```sh
    openssl req -x509 -newkey rsa:3072 -sha256 -days 1825 -nodes \
      -subj "/CN=cheesecloth" \
+     -addext "basicConstraints=critical,CA:FALSE" \
      -addext "keyUsage=critical,digitalSignature" \
      -addext "extendedKeyUsage=codeSigning" \
      -keyout signing.key -out signing.cer
    openssl pkcs12 -export -inkey signing.key -in signing.cer -out signing.pfx
    ```
+
+   Without `CA:FALSE`, OpenSSL's default configuration makes a CA
+   certificate, and Windows rejects a signature made with one ("A
+   certificate's basic constraint extension has not been observed").
 
 2. Commit `signing.cer`, and put its thumbprint
    (`openssl x509 -in signing.cer -noout -fingerprint -sha1`, without the
