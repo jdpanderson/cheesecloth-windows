@@ -7,6 +7,16 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.0-1] - 2026-10-13
+
+The first test release of the tray app, with cheesecloth 0.5.0-beta.0.
+
+### Changed
+
+- The installer accepts pre-release versions. Its file version uses the
+  numeric part, while the installer name and installed version keep the full
+  release name.
+
 ## [0.4.0-2] - 2026-10-11
 
 The installer for cheesecloth 0.4.0, signed with a self-signed certificate.

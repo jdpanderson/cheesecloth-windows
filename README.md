@@ -203,9 +203,9 @@ unsigned, and its notes say so. While signing is on, the release waits for
 the signed installers and their checks; if signing fails, nothing is
 published.
 
-The installer's own version is the binary's version, such as `0.4.0`, since
-Windows versions hold only numbers. So installing `0.4.0-1` over a
-`0.4.0pre0` installer is a same-version reinstall.
+The installer's displayed version is the binary's full version, such as
+`0.5.0-beta.0`. Its Windows file version holds only numbers (`0.5.0.0` for
+that beta). The setup file name and the Uninstall entry keep the full version.
 
 ### Tools
 
