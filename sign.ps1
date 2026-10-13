@@ -22,12 +22,15 @@ if (-not $env:WINDOWS_SIGNING_CERT -or -not $env:WINDOWS_SIGNING_PASSWORD) {
     throw 'WINDOWS_SIGNING_CERT and WINDOWS_SIGNING_PASSWORD must be set'
 }
 
-# The version of the unsigned installer that build.ps1 made, read without
-# running the binary.
+# The full version of the unsigned installer that build.ps1 made, read from
+# its name without running the binary. Windows file versions omit beta text.
 $unsigned = @(Get-Item (Join-Path $PSScriptRoot "dist\cheesecloth-*-windows-$Arch-setup.exe"))
 if ($unsigned.Count -ne 1) { throw "expected one unsigned installer in dist, found $($unsigned.Count)" }
-$v = $unsigned[0].VersionInfo.FileVersionRaw
-$version = "$($v.Major).$($v.Minor).$($v.Build)"
+$name = $unsigned[0].Name
+if ($name -notmatch "^cheesecloth-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)-windows-$Arch-setup\.exe$") {
+    throw "unexpected installer name '$name'"
+}
+$version = $Matches[1]
 
 # The newest signtool for this machine.
 $hostArch = @{ AMD64 = 'x64'; ARM64 = 'arm64' }[$env:PROCESSOR_ARCHITECTURE]

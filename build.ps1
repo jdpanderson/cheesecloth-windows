@@ -31,11 +31,12 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 
 if (-not $Version) {
-    # "cheesecloth 0.3.0"
+    # "cheesecloth 0.5.0-beta.0"
     $Version = (& $Exe --version) -replace '^cheesecloth ', ''
     if ($LASTEXITCODE -ne 0) { throw "$Exe --version failed" }
 }
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "unexpected version '$Version'" }
+if ($Version -notmatch '^(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?$') { throw "unexpected version '$Version'" }
+$numericVersion = $Matches[1]
 
 # Stage the files.
 $work = Join-Path $PSScriptRoot 'target\windows'
@@ -93,7 +94,7 @@ $license
 "@
 Set-Content -Path (Join-Path $stage 'THIRD-PARTY-NOTICES.md') -Value $notices -Encoding utf8NoBOM -NoNewline
 
-$iscc = @('/Q', "/DVersion=$Version", "/DArch=$Arch", "/DStage=$stage", "/O$OutDir")
+$iscc = @('/Q', "/DVersion=$Version", "/DNumericVersion=$numericVersion", "/DArch=$Arch", "/DStage=$stage", "/O$OutDir")
 if ($SignTool) { $iscc += '/DSign', "/Scheesecloth=$SignTool" }
 & ISCC.exe @iscc (Join-Path $PSScriptRoot 'cheesecloth.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed with exit code $LASTEXITCODE" }

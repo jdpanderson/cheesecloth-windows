@@ -131,6 +131,7 @@ function UninstallEntries {
 
 $version = (& $Exe --version) -replace '^cheesecloth ', ''
 if ($LASTEXITCODE -ne 0) { throw "$Exe --version failed" }
+$numericVersion = $version -replace '-.*$', ''
 New-Item -ItemType Directory -Force $work | Out-Null
 
 function CheckOptions([string] $opts, [string] $what) {
@@ -141,7 +142,7 @@ function CheckOptions([string] $opts, [string] $what) {
 Write-Host '== Install'
 Install $Setup 'install' -More '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
 CheckOptions ' --no-port-mapping --log info' 'the service has the options'
-Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$version.0") 'the installer has the version of the binary'
+Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$numericVersion.0") 'the installer has the numeric version of the binary'
 foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'unins000.exe') {
     Check (Test-Path (Join-Path $app $file)) "$file is installed"
 }
@@ -232,7 +233,7 @@ WaitUntil 'a restart after a crash' {
 } -Seconds 30
 
 Write-Host '== Upgrade'
-$v = [version]$version
+$v = [version]$numericVersion
 $next = "$($v.Major).$($v.Minor).$($v.Build + 1)"
 $upgradeDir = Join-Path $work 'upgrade'
 & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $next -OutDir $upgradeDir

@@ -5,13 +5,13 @@
 ; /CHEESECLOTH_OPTS="..." on the command line, or the wizard's options page,
 ; sets the daemon's options, as CHEESECLOTH_OPTS does on Linux.
 ;
-; build.ps1 defines Version, Arch (x64 or arm64) and Stage (the staged files).
+; build.ps1 defines Version, NumericVersion, Arch (x64 or arm64) and Stage.
 
 #if Ver < EncodeVer(7, 1, 0)
   #error Inno Setup 7.1 or later is needed
 #endif
-#if !Defined(Version) || !Defined(Arch) || !Defined(Stage)
-  #error Build with build.ps1, which defines Version, Arch and Stage
+#if !Defined(Version) || !Defined(NumericVersion) || !Defined(Arch) || !Defined(Stage)
+  #error Build with build.ps1, which defines Version, NumericVersion, Arch and Stage
 #endif
 
 ; build.ps1 -SignTool defines Sign, and the Sign Tool "cheesecloth".
@@ -35,7 +35,7 @@
 AppId={{CFACBA51-554C-488D-B946-84F644BFB8D5}
 AppName=cheesecloth
 AppVersion={#Version}
-VersionInfoVersion={#Version}
+VersionInfoVersion={#NumericVersion}
 AppPublisher=Jonathan Anderson
 AppPublisherURL=https://github.com/jdpanderson/cheesecloth
 AppSupportURL=https://github.com/jdpanderson/cheesecloth/issues
