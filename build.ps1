@@ -46,6 +46,14 @@ Copy-Item $Exe (Join-Path $stage 'cheesecloth.exe')
 Copy-Item (Join-Path $Source 'README.md'), (Join-Path $Source 'LICENSE') $stage
 Copy-Item (Join-Path $Source 'docs\*.md') (Join-Path $stage 'docs')
 
+# Build a single-file tray app for the same architecture as the daemon.
+$runtime = @{ x64 = 'win-x64'; arm64 = 'win-arm64' }[$Arch]
+$publish = Join-Path $work "$Arch\tray"
+& dotnet publish (Join-Path $PSScriptRoot 'tray\Cheesecloth.Tray.csproj') -c Release -r $runtime --self-contained true `
+    -p:PublishSingleFile=true -p:DebugType=None -p:Version=$Version -o $publish
+if ($LASTEXITCODE -ne 0) { throw "publishing the tray app failed with exit code $LASTEXITCODE" }
+Copy-Item (Join-Path $publish 'Cheesecloth.Tray.exe') (Join-Path $stage 'cheesecloth-tray.exe')
+
 # Wintun, from its official release. A cached copy is used when its hash
 # matches.
 $zip = Join-Path $work "wintun-$WintunVersion.zip"

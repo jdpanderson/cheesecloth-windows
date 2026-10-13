@@ -1,7 +1,3 @@
 # What the installer packages. The format is in "Contracts" in
 # docs/REPOSITORIES.md of cheesecloth.
-release = "0.4.0"
-
-[sha256]
-x86_64-pc-windows-msvc = "b983e29712a13c32e4afd643567740fcfd500b83fee69d964da473039f6bdbd8"
-aarch64-pc-windows-msvc = "8e5b9147c36ac83c40926614acfaa1a4527a6eda5bad14651c97ed752451ed1c"
+commit = "6e7893a6de366fea6d165097b026a200cd2f7372"
