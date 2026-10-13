@@ -52,7 +52,7 @@ try {
     & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $version -OutDir (Join-Path $PSScriptRoot 'dist') -SignTool $command
 
     $setup = Join-Path $PSScriptRoot "dist\cheesecloth-$version-windows-$Arch-setup.exe"
-    & (Join-Path $PSScriptRoot 'verify.ps1') -File (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth.exe"), $setup
+    & (Join-Path $PSScriptRoot 'verify.ps1') -File (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth.exe"), (Join-Path $PSScriptRoot "target\windows\$Arch\stage\cheesecloth-tray.exe"), $setup
 } finally {
     if (Test-Path $pfx) { Remove-Item $pfx }
     foreach ($c in $imported) {

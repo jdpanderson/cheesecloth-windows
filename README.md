@@ -2,7 +2,7 @@
 
 An Inno Setup installer for
 [cheesecloth](https://github.com/jdpanderson/cheesecloth) on Windows. It
-installs `cheesecloth.exe` with `wintun.dll` into
+installs `cheesecloth.exe`, the tray app, and `wintun.dll` into
 `C:\Program Files\cheesecloth`, adds that folder to the system PATH, registers
 the Event Log source, and sets up and starts the service. See
 [docs/WINDOWS.md](https://github.com/jdpanderson/cheesecloth/blob/main/docs/WINDOWS.md)
@@ -21,7 +21,16 @@ Pick the installer for your machine from the release, or from the CI run's
 
 The wrong one stops at once with a message. Run the installer and follow the
 wizard. It installs into `C:\Program Files\cheesecloth`, then starts the
-service. Shells opened before the install do not see the new PATH.
+service. It opens the tray app for the installing user and starts it at each
+later sign-in. Shells opened before the install do not see the new PATH.
+
+The tray icon opens the network menu. Use it to create or join a network, see
+status and peers, invite a member, and approve changes. The app asks the
+installed CLI to use the daemon's local API. It checks only while its menu or
+a window is open. It follows the service's `--state-dir` and `--socket` options.
+Windows runs the daemon as a service even after you choose
+**Close Tray Application** or sign out. An administrator who is not elevated may use
+the network actions. Other users see **Administrators only**.
 
 For a silent install, run it from an elevated shell:
 
@@ -44,7 +53,8 @@ stopped and disabled until the next install that succeeds.
 
 A newer installer upgrades in place, and running the same version again
 reinstalls it. Downgrades are not supported: an older daemon may not read the
-state files of a newer one.
+state files of a newer one. An upgrade closes a running tray app and opens the
+new one for the installing user when the wizard finishes.
 
 The installer also sets the service's restart on failure (after 5 seconds)
 and gives the daemon 30 seconds to stop at system shutdown.
@@ -81,7 +91,9 @@ next upgrade.
 
 ## Uninstall
 
-Use Settings > Apps, or run from an elevated shell:
+Use Settings > Apps, or run from an elevated shell. Uninstall closes the tray
+app in the current session. Users in other signed-in sessions must quit it
+first:
 
 ```powershell
 & "C:\Program Files\cheesecloth\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES
@@ -128,7 +140,7 @@ In CI (`.github/workflows/ci.yml`), the `binary` job gets the pinned
 then builds and checks the installers: `build.ps1` builds one, and
 `check.ps1` installs, upgrades, reinstalls and uninstalls it on the runner.
 
-To build one by hand, with Inno Setup on PATH and a cheesecloth checkout
+To build one by hand, with Inno Setup and the .NET 10 SDK on PATH and a cheesecloth checkout
 beside this one, at the commit or tag of the exe:
 
 ```powershell

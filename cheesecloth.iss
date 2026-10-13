@@ -1,6 +1,6 @@
 ; The cheesecloth installer for Windows, built by build.ps1 with Inno Setup.
-; It installs the binary, wintun.dll and the docs, adds the folder to the
-; system PATH, registers the Event Log source, and sets up and starts the
+; It installs the daemon, tray app, wintun.dll and docs, adds the folder to
+; the system PATH, registers the Event Log source, and sets up and starts the
 ; service, as packaging/cheesecloth.service in cheesecloth does with systemd.
 ; /CHEESECLOTH_OPTS="..." on the command line, or the wizard's options page,
 ; sets the daemon's options, as CHEESECLOTH_OPTS does on Linux.
@@ -54,8 +54,11 @@ SetupArchitecture=x64
 ArchitecturesAllowed={#Archs}
 ArchitecturesInstallIn64BitMode={#Archs}
 ChangesEnvironment=yes
-; PrepareToInstall stops the service; the Restart Manager must not touch it.
-CloseApplications=no
+; PrepareToInstall stops the service first. Restart Manager closes only the
+; tray app when upgrading it; cheesecloth.exe keeps its own in-use check.
+CloseApplications=yes
+CloseApplicationsFilter=cheesecloth-tray.exe
+RestartApplications=no
 UninstallDisplayIcon={app}\cheesecloth.exe
 OutputBaseFilename=cheesecloth-{#Version}-windows-{#Arch}-setup
 Compression=lzma2
@@ -67,6 +70,7 @@ SignTool=cheesecloth
 
 [Files]
 Source: "{#Stage}\cheesecloth.exe"; DestDir: "{app}"; Flags: ignoreversion{#SignFlag}
+Source: "{#Stage}\cheesecloth-tray.exe"; DestDir: "{app}"; Flags: ignoreversion{#SignFlag}
 Source: "{#Stage}\wintun.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
@@ -79,6 +83,15 @@ Source: "{#Stage}\docs\*.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\cheesecloth"; ValueType: expandsz; ValueName: "EventMessageFile"; ValueData: "{app}\cheesecloth.exe"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\cheesecloth"; ValueType: dword; ValueName: "TypesSupported"; ValueData: 7
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath
+; Start one tray app in each signed-in user's session. The service keeps
+; running when a user closes the tray app or signs out.
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "cheesecloth"; ValueData: """{app}\cheesecloth-tray.exe"""; Flags: uninsdeletevalue
+
+[Icons]
+Name: "{autoprograms}\Cheesecloth"; Filename: "{app}\cheesecloth-tray.exe"
+
+[Run]
+Filename: "{app}\cheesecloth-tray.exe"; Description: "Open Cheesecloth"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 const
@@ -96,6 +109,7 @@ const
   { How long to wait for cheesecloth.exe to be free before asking, in ms. }
   InUseWait = 5000;
   InUseMessage = 'cheesecloth.exe is in use, for example by Event Viewer showing cheesecloth''s events.';
+  WM_CLOSE = $0010;
 
   SC_MANAGER_CONNECT = $0001;
   SERVICE_CHANGE_CONFIG = $0002;
@@ -142,7 +156,7 @@ function ControlService(Service: THandle; Control: DWORD; var Status: TServiceSt
 function ChangeServiceConfig2(Service: THandle; InfoLevel: DWORD; var Info: DWORD): BOOL;
   external 'ChangeServiceConfig2W@advapi32.dll stdcall';
 
-{ What ExeInUse needs. The file handle is an Int64, not a THandle, so that
+{ What FileInUse needs. The file handle is an Int64, not a THandle, so that
   INVALID_HANDLE_VALUE is -1. Info is a FILE_DISPOSITION_INFO, which holds
   one BOOLEAN. }
 function CreateFile(FileName: String; Access, ShareMode: DWORD; Security: Int64;
@@ -460,25 +474,23 @@ begin
   WaitUntilRunning;
 end;
 
-{ Whether the installed cheesecloth.exe cannot be deleted, as Setup must do
-  to replace it. It does what DeleteFile does: it opens the file and marks it
-  for deletion. Then it clears the mark, so the file is not deleted. A
-  program that shows cheesecloth's events, such as Event Viewer, holds the
-  file, because the Event Log source reads its messages from it. }
-function ExeInUse: Boolean;
+{ Whether an installed file cannot be deleted, as Setup must do to replace
+  it. It does what DeleteFile does: it opens the file and marks it for
+  deletion. Then it clears the mark, so the file is not deleted. }
+function FileInUse(Name: String): Boolean;
 var
   Exe: String;
   F: Int64;
   Mark: Byte;
 begin
   Result := False;
-  Exe := ExpandConstant('{app}\cheesecloth.exe');
+  Exe := ExpandConstant('{app}\' + Name);
   if not FileExists(Exe) then
     Exit;
   F := CreateFile(Exe, DELETE_ACCESS, FILE_SHARE_ALL, 0, OPEN_EXISTING, 0, 0);
   if F = -1 then
   begin
-    Log('cheesecloth.exe is in use: opening it to delete it failed: ' +
+    Log(Name + ' is in use: opening it to delete it failed: ' +
       SysErrorMessage(DLLGetLastError));
     Result := True;
     Exit;
@@ -487,7 +499,7 @@ begin
     Mark := 1;
     if not SetFileInformationByHandle(F, FileDispositionInfo, Mark, 1) then
     begin
-      Log('cheesecloth.exe is in use: marking it for deletion failed: ' +
+      Log(Name + ' is in use: marking it for deletion failed: ' +
         SysErrorMessage(DLLGetLastError));
       Result := True;
     end
@@ -511,13 +523,36 @@ var
   Waited: Integer;
 begin
   Waited := 0;
-  Result := not ExeInUse;
+  Result := not FileInUse('cheesecloth.exe');
   while not Result and (Waited < InUseWait) do
   begin
     Sleep(500);
     Waited := Waited + 500;
-    Result := not ExeInUse;
+    Result := not FileInUse('cheesecloth.exe');
   end;
+end;
+
+{ The uninstaller does not use Restart Manager. Close the tray app in this
+  session before stopping the service. If another session still uses it,
+  stop before changing the service and ask the user to close it there. }
+procedure CloseTrayForUninstall;
+var
+  Window: HWND;
+  Waited: Integer;
+begin
+  if not FileInUse('cheesecloth-tray.exe') then
+    Exit;
+  Window := FindWindowByWindowName('Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5');
+  if Window <> 0 then
+    PostMessage(Window, WM_CLOSE, 0, 0);
+  Waited := 0;
+  while FileInUse('cheesecloth-tray.exe') and (Waited < InUseWait) do
+  begin
+    Sleep(500);
+    Waited := Waited + 500;
+  end;
+  if FileInUse('cheesecloth-tray.exe') then
+    RaiseException('Close Cheesecloth in every signed-in session, then uninstall again.');
 end;
 
 { A failure here makes Setup exit with code 7 before it changes any file.
@@ -570,10 +605,13 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   case CurUninstallStep of
     usUninstall:
-      if ServiceState <> 0 then
       begin
-        StopService;
-        Sc('delete ' + ServiceName);
+        CloseTrayForUninstall;
+        if ServiceState <> 0 then
+        begin
+          StopService;
+          Sc('delete ' + ServiceName);
+        end;
       end;
     usPostUninstall:
       RemoveFromPath;

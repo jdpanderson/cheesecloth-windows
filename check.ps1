@@ -21,6 +21,7 @@ $Setup = (Resolve-Path $Setup).Path
 $Exe = (Resolve-Path $Exe).Path
 $app = Join-Path $env:ProgramFiles 'cheesecloth'
 $cli = Join-Path $app 'cheesecloth.exe'
+$tray = Join-Path $app 'cheesecloth-tray.exe'
 $state = Join-Path $env:ProgramData 'cheesecloth'
 # The AppId in cheesecloth.iss.
 $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CFACBA51-554C-488D-B946-84F644BFB8D5}_is1'
@@ -141,14 +142,22 @@ Write-Host '== Install'
 Install $Setup 'install' -More '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
 CheckOptions ' --no-port-mapping --log info' 'the service has the options'
 Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$version.0") 'the installer has the version of the binary'
-foreach ($file in 'cheesecloth.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'unins000.exe') {
+foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'unins000.exe') {
     Check (Test-Path (Join-Path $app $file)) "$file is installed"
 }
 $machine = @{ x64 = 0x8664; arm64 = 0xAA64 }[$Arch]
-foreach ($file in 'cheesecloth.exe', 'wintun.dll') {
+foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll') {
     Check ((Machine (Join-Path $app $file)) -eq $machine) "$file is for $Arch"
 }
 Check (Select-String -Path (Join-Path $app 'THIRD-PARTY-NOTICES.md') -Pattern '## Wintun' -SimpleMatch -Quiet) 'the notices include Wintun'
+Check ((Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' 'cheesecloth') -eq "`"$tray`"") 'the tray app starts at sign-in'
+$trayProcess = Start-Process $tray -PassThru
+try {
+    Start-Sleep -Seconds 2
+    Check (-not $trayProcess.HasExited) 'the tray app opens without a main window'
+} finally {
+    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
+}
 
 $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 Check (($machinePath -split ';') -contains $app) 'the machine PATH has the install folder'
@@ -229,7 +238,15 @@ $upgradeDir = Join-Path $work 'upgrade'
 & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $next -OutDir $upgradeDir
 $upgrade = Join-Path $upgradeDir "cheesecloth-$next-windows-$Arch-setup.exe"
 $old = (TheService).ProcessId
-Install $upgrade 'upgrade'
+$trayProcess = Start-Process $tray -PassThru
+try {
+    Start-Sleep -Seconds 2
+    Check (-not $trayProcess.HasExited) 'the tray app runs before the upgrade'
+    Install $upgrade 'upgrade'
+    Check $trayProcess.HasExited 'the upgrade closed the tray app'
+} finally {
+    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
+}
 $entries = @(UninstallEntries)
 Check ($entries.Count -eq 1) 'the upgrade replaced the old install'
 Check ($entries[0].GetValue('DisplayVersion') -eq $next) 'the Uninstall entry has the new version'
@@ -315,13 +332,23 @@ $quiet = Get-ItemPropertyValue $uninstallKey 'QuietUninstallString'
 if ($quiet -notmatch '^"([^"]+)"\s*(.*)$') { throw "unexpected QuietUninstallString: $quiet" }
 $uninstaller = $Matches[1]
 $arguments = "$($Matches[2]) /SUPPRESSMSGBOXES `"/LOG=$(Join-Path $work 'uninstall.log')`""
-Write-Host "running $uninstaller $arguments"
-$process = Start-Process $uninstaller -ArgumentList $arguments -Wait -PassThru
-if ($process.ExitCode -ne 0) { throw "the uninstaller exited with $($process.ExitCode)" }
+$trayProcess = Start-Process $tray -PassThru
+try {
+    Start-Sleep -Seconds 2
+    Check (-not $trayProcess.HasExited) 'the tray app runs before uninstall'
+    Write-Host "running $uninstaller $arguments"
+    $process = Start-Process $uninstaller -ArgumentList $arguments -Wait -PassThru
+    if ($process.ExitCode -ne 0) { throw "the uninstaller exited with $($process.ExitCode)" }
+    Check $trayProcess.HasExited 'uninstall closed the tray app'
+} finally {
+    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
+}
 Check ($null -eq (Get-Service cheesecloth -ErrorAction SilentlyContinue)) 'the service is gone'
 $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 Check (($machinePath -split ';') -notcontains $app) 'the machine PATH no longer has the install folder'
 Check (-not (Test-Path $eventLogKey)) 'the Event Log source is gone'
+$runKey = Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+Check ($null -eq $runKey.GetValue('cheesecloth', $null)) 'the tray startup entry is gone'
 Check (-not (Test-Path $uninstallKey)) 'the Uninstall entry is gone'
 Check (-not (Test-Path $app)) 'the install folder is gone'
 Check (@(Get-ChildItem $state).Count -gt 0) 'the state directory is kept'

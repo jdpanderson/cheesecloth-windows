@@ -210,6 +210,11 @@ jobs:
           name: windows-exe-${{ matrix.arch }}
           path: target/exe
       - uses: ./.github/actions/inno-setup
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Check tray accessibility and scaling
+        run: dotnet run --project tests/TrayChecks/TrayChecks.csproj --configuration Release
       - name: Build installer
         run: ./build.ps1 -Arch ${{ matrix.arch }} -Exe target/exe/cheesecloth.exe -Source cheesecloth
       - name: Check installer
@@ -270,6 +275,9 @@ jobs:
           name: cheesecloth-windows-${{ matrix.arch }}
           path: dist
       - uses: ./.github/actions/inno-setup
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 10.0.x
       - name: Sign
         env:
           WINDOWS_SIGNING_CERT: ${{ secrets.WINDOWS_SIGNING_CERT }}
@@ -321,6 +329,9 @@ jobs:
           name: cheesecloth-windows-${{ matrix.arch }}-signed
           path: dist
       - uses: ./.github/actions/inno-setup
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 10.0.x
       - name: Check signed installer
         run: |
           $setup = (Get-Item dist/*-setup.exe).FullName
