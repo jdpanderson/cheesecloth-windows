@@ -29,6 +29,11 @@
   #error Arch must be x64 or arm64
 #endif
 
+; The only folder Setup installs into. In Program Files only administrators
+; may change files, and the service runs cheesecloth.exe from it as
+; LocalSystem. check.ps1 uses it too.
+#define InstallDir "{autopf}\cheesecloth"
+
 [Setup]
 ; Never change the AppId: a new one would install a second copy. check.ps1
 ; uses it too.
@@ -39,8 +44,8 @@ VersionInfoVersion={#NumericVersion}
 AppPublisher=Jonathan Anderson
 AppPublisherURL=https://github.com/jdpanderson/cheesecloth
 AppSupportURL=https://github.com/jdpanderson/cheesecloth/issues
-DefaultDirName={autopf}\cheesecloth
-DisableDirPage=auto
+DefaultDirName={#InstallDir}
+DisableDirPage=yes
 DisableProgramGroupPage=yes
 UsePreviousAppDir=yes
 PrivilegesRequired=admin
@@ -555,12 +560,31 @@ begin
     RaiseException('Close Cheesecloth in every signed-in session, then uninstall again.');
 end;
 
+{ The folder Setup would install into, if /DIR= named one other than
+  InstallDir, else ''. Other users may be able to change files there. }
+function OtherInstallFolder: String;
+begin
+  Result := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
+  if CompareText(Result, ExpandConstant('{#InstallDir}')) = 0 then
+    Result := '';
+end;
+
 { A failure here makes Setup exit with code 7 before it changes any file.
+  Another install folder is refused first, so the service is left as it is.
   While cheesecloth.exe stays in use, the wizard asks the user to close the
   program and retry; /SUPPRESSMSGBOXES answers Cancel. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Folder: String;
 begin
   Result := '';
+  Folder := OtherInstallFolder;
+  if Folder <> '' then
+  begin
+    Result := 'Setup installs cheesecloth only into ' + ExpandConstant('{#InstallDir}') +
+      ', not into ' + Folder + ', because other users may be able to change files there.';
+    Exit;
+  end;
   try
     StopService;
   except
