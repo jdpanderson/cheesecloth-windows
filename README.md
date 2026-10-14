@@ -24,6 +24,10 @@ wizard. It installs into `C:\Program Files\cheesecloth`, then starts the
 service. It opens the tray app for the installing user and starts it at each
 later sign-in. Shells opened before the install do not see the new PATH.
 
+The installer uses no other folder, and refuses `/DIR=` with another one,
+because the service runs `cheesecloth.exe` as LocalSystem, and other users
+may be able to change files in another folder.
+
 The tray icon opens the network menu. Use it to create or join a network, see
 status and peers, invite a member, and approve changes. The app asks the
 installed CLI to use the daemon's local API. It checks only while its menu or
@@ -44,7 +48,7 @@ For a silent install, run it from an elevated shell:
 | Code | Meaning |
 | --- | --- |
 | 0 | Installed, and the service runs. |
-| 7 | The service could not be stopped, or `cheesecloth.exe` is in use (see [Weak points](#weak-points)). No files have changed. |
+| 7 | The install folder is not `C:\Program Files\cheesecloth`, the service could not be stopped, or `cheesecloth.exe` is in use (see [Weak points](#weak-points)). No files have changed. |
 | 10 | The files are installed, but the service could not be set up or did not start. The log and the Event Log say why. |
 
 Other codes are [Inno Setup's](https://jrsoftware.org/ishelp/topic_setupexitcodes.htm).

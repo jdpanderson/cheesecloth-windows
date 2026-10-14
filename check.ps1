@@ -206,6 +206,20 @@ $who = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]
     ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique
 Check ($null -eq (Compare-Object @($who) @($admins, $system))) "only SYSTEM and Administrators may use the state directory ($who)"
 
+# The service runs cheesecloth.exe as LocalSystem, and the install folder is
+# on PATH, so other users must not be able to change it. The rights that
+# change a folder or its files: write data, append data, write attributes and
+# extended attributes, delete, delete children, change permissions, take
+# ownership, and the generic write and all rights.
+$changeRights = 0x500D0156
+$others = 'S-1-1-0', 'S-1-5-11', 'S-1-5-32-545' # Everyone, Authenticated Users, Users
+$writers = (Get-Acl $app).GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+    Where-Object {
+        $_.AccessControlType -eq 'Allow' -and $others -contains $_.IdentityReference.Value -and
+            ([int] $_.FileSystemRights -band $changeRights) -ne 0
+    } | ForEach-Object { $_.IdentityReference.Value }
+Check ($null -eq $writers) "other users may not change the install folder ($writers)"
+
 Write-Host '== Lifecycle'
 WaitUntil 'the local API' { $null -ne (Status) }
 RunCli init
@@ -261,6 +275,18 @@ Install $upgrade 'reinstall' -More '/CHEESECLOTH_OPTS='
 Check ((TheService).State -eq 'Running') 'the service runs after a reinstall'
 CheckOptions '' 'an empty /CHEESECLOTH_OPTS= cleared the options'
 WaitUntil 'a member after the reinstall' { $s = Status; $s -and $s.phase -eq 'member' }
+
+Write-Host '== Another folder'
+# Setup installs only into Program Files. It refuses another folder before it
+# stops the service, so the service keeps running as it was set up.
+$elsewhere = Join-Path $env:SystemDrive 'cheesecloth-elsewhere'
+$old = (TheService).ProcessId
+Install $upgrade 'elsewhere' -More "`"/DIR=$elsewhere`"" -Expect 7
+Check (Select-String -Path (Join-Path $work 'elsewhere.log') -Pattern 'Setup installs cheesecloth only into' -SimpleMatch -Quiet) 'Setup refuses another folder'
+Check (-not (Test-Path $elsewhere)) 'Setup makes nothing in the other folder'
+$service = TheService
+Check ($service.State -eq 'Running' -and $service.ProcessId -eq $old) 'the refused install leaves the service running'
+CheckRestarts
 
 Write-Host '== A failing service'
 # The daemon cannot bind to an address that the machine does not have. So the

@@ -7,6 +7,13 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Security
+
+- The installer installs only into `C:\Program Files\cheesecloth`, and
+  refuses `/DIR=` with another folder (exit code 7). Another folder keeps the
+  access of its parent, so under `C:\`, for example, other users could change
+  `cheesecloth.exe`, which the service runs as LocalSystem.
+
 ## [0.5.0-beta.0-1] - 2026-10-13
 
 The first test release of the tray app, with cheesecloth 0.5.0-beta.0.
