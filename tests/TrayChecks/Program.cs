@@ -12,6 +12,7 @@ internal static class Program
         CheckCliErrors();
         CheckPeerPaths();
         var client = new DaemonClient();
+        CheckPermissions(client);
         var pages = new (string Name, Func<Form> Create)[]
         {
             ("confirmation", () => Ui.CreateConfirmation("Leave the network?",
@@ -21,7 +22,8 @@ internal static class Program
             ("create", () => new CreateForm(client)),
             ("join", () => new JoinForm(client)),
             ("status", () => new StatusForm(client)),
-            ("peers", () => new PeersForm(client)),
+            ("peers", () => new PeersForm(client, true)),
+            ("peers without admin", () => new PeersForm(client, false)),
             ("invite", () => new InviteForm(client)),
             ("approvals", () => new ApprovalsForm(client)),
         };
@@ -72,6 +74,33 @@ internal static class Program
             PeersForm.PathColor("future_state", false) != Ui.Off ||
             PeersForm.PathColor("up", true) != Ui.Off)
             throw new Exception("The tray did not use the documented peer path codes.");
+    }
+
+    // Only an admin may invite, so other members' Peers windows have no
+    // Invite button. The permissions are named for people, and the Invite
+    // window takes away each permission whose box is cleared.
+    private static void CheckPermissions(DaemonClient client)
+    {
+        bool HasInvite(bool admin)
+        {
+            using var page = new PeersForm(client, admin);
+            return Descendants(page).OfType<Button>().Any(button => button.Text == "Invite…");
+        }
+        if (!HasInvite(true) || HasInvite(false))
+            throw new Exception("The Peers window did not follow this node's admin permission.");
+
+        using var permissions = System.Text.Json.JsonDocument.Parse("""
+            [{"admin":true,"vote":true,"relay":true},{"admin":false,"vote":true,"relay":true},
+             {"admin":true,"vote":false,"relay":false},{"admin":false,"vote":false,"relay":false}]
+            """);
+        var names = permissions.RootElement.Items().Select(PeersForm.PermissionNames).ToArray();
+        if (names is not ["All", "Voter, Relay", "Admin", "Member"])
+            throw new Exception($"The tray named the permissions {string.Join("; ", names)}.");
+
+        if (InviteForm.InviteArguments(true, true, true) is not ["invite"] ||
+            InviteForm.InviteArguments(false, true, false) is not ["invite", "--no-admin", "--no-relay"] ||
+            InviteForm.InviteArguments(false, false, false) is not ["invite", "--no-admin", "--no-vote", "--no-relay"])
+            throw new Exception("The Invite window did not pass the cleared permissions to the CLI.");
     }
 
     private static void SetFontScale(Control control, float scale)

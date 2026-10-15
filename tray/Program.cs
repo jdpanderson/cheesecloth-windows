@@ -123,7 +123,8 @@ internal sealed class TrayContext : ApplicationContext
         try
         {
             status = await client.CallAsync("status");
-            if (status.Text("phase") == "member")
+            // Only an admin may approve or reject.
+            if (status.Text("phase") == "member" && status.Get("permissions").Flag("admin"))
             {
                 try { pending = (await client.CallAsync("pending")).GetArrayLength(); }
                 catch (DaemonException) { pending = 0; }
@@ -173,7 +174,8 @@ internal sealed class TrayContext : ApplicationContext
                     break;
                 case "member":
                     Add("Status…", () => Open(new StatusForm(client)));
-                    Add("Peers…", () => Open(new PeersForm(client)));
+                    var admin = status.Get("permissions").Flag("admin");
+                    Add("Peers…", () => Open(new PeersForm(client, admin)));
                     if (pending > 0) Add($"Approvals ({pending})…", () => Open(new ApprovalsForm(client)));
                     break;
                 case "stopping":
