@@ -424,6 +424,8 @@ internal sealed class StatusForm : PageForm
     {
         Heading(status.Flag("public") ? "Public" : "Behind NAT", status.Flag("public") ? Ui.Good : Ui.Off);
         if (status.Flag("relay")) Heading("Relay", Ui.Off);
+        Row("Permissions", PeersForm.PermissionNames(status.Get("permissions")),
+            "What this computer may do, set by its invite. Admin: invite, remove, approve and change settings. Voter: be an acceptor, and take joins to the network. Relay: relay messages for other members. All: all three. Member: none of them. Every member can use the network and leave. Permissions never change.");
         Row("Overlay IPv4", status.Text("ipv4"));
         Row("Overlay IPv6", status.Text("ipv6"));
         Row("Conditions", $"{(status.Flag("public") ? "public" : "behind NAT")}, " +
