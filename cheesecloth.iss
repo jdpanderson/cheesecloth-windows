@@ -59,11 +59,9 @@ SetupArchitecture=x64
 ArchitecturesAllowed={#Archs}
 ArchitecturesInstallIn64BitMode={#Archs}
 ChangesEnvironment=yes
-; PrepareToInstall stops the service first. Restart Manager closes only the
-; tray app when upgrading it; cheesecloth.exe keeps its own in-use check.
-CloseApplications=yes
-CloseApplicationsFilter=cheesecloth-tray.exe
-RestartApplications=no
+; PrepareToInstall closes the tray app and stops the service itself.
+; Restart Manager cannot close the tray app, which shows no window.
+CloseApplications=no
 UninstallDisplayIcon={app}\cheesecloth.exe
 OutputBaseFilename=cheesecloth-{#Version}-windows-{#Arch}-setup
 Compression=lzma2
@@ -537,10 +535,10 @@ begin
   end;
 end;
 
-{ The uninstaller does not use Restart Manager. Close the tray app in this
-  session before stopping the service. If another session still uses it,
-  stop before changing the service and ask the user to close it there. }
-procedure CloseTrayForUninstall;
+{ Closes the tray app in this session, before Setup or the uninstaller stops
+  the service. If another session still uses it, raises an error, so the
+  caller stops before it changes anything and the user can close it there. }
+procedure CloseTray;
 var
   Window: HWND;
   Waited: Integer;
@@ -557,7 +555,7 @@ begin
     Waited := Waited + 500;
   end;
   if FileInUse('cheesecloth-tray.exe') then
-    RaiseException('Close Cheesecloth in every signed-in session, then uninstall again.');
+    RaiseException('Close Cheesecloth in every signed-in session, then try again.');
 end;
 
 { The folder Setup would install into, if /DIR= named one other than
@@ -583,6 +581,12 @@ begin
   begin
     Result := 'Setup installs cheesecloth only into ' + ExpandConstant('{#InstallDir}') +
       ', not into ' + Folder + ', because other users may be able to change files there.';
+    Exit;
+  end;
+  try
+    CloseTray;
+  except
+    Result := GetExceptionMessage;
     Exit;
   end;
   try
@@ -630,7 +634,7 @@ begin
   case CurUninstallStep of
     usUninstall:
       begin
-        CloseTrayForUninstall;
+        CloseTray;
         if ServiceState <> 0 then
         begin
           StopService;

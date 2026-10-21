@@ -155,7 +155,10 @@ Check ((Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\R
 $trayProcess = Start-Process $tray -PassThru
 try {
     Start-Sleep -Seconds 2
-    Check (-not $trayProcess.HasExited) 'the tray app opens without a main window'
+    Check (-not $trayProcess.HasExited) 'the tray app runs'
+    # MainWindowHandle is 0 when the process shows no window.
+    $trayProcess.Refresh()
+    Check ($trayProcess.MainWindowHandle -eq 0) 'the tray app shows no window'
 } finally {
     if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
 }
