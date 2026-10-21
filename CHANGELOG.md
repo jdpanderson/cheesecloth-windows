@@ -7,6 +7,20 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.2-1] - 2026-10-21
+
+### Fixed
+
+- The service starts on a Windows install without the Visual C++
+  Redistributable. The installer packages cheesecloth 0.5.0-beta.2, whose
+  `cheesecloth.exe` no longer needs `VCRUNTIME140.dll`. Before, Setup said
+  the service "did not respond to the start or control request in a timely
+  fashion", and the tray app's commands failed.
+- The tray app no longer opens an empty "Cheesecloth tray" window when it
+  starts.
+
+## [0.5.0-beta.1-1] - 2026-10-15
+
 ### Added
 
 - Member permissions in the tray. The Invite window has a checkbox for each
