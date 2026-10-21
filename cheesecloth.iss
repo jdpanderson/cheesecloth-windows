@@ -60,7 +60,8 @@ ArchitecturesAllowed={#Archs}
 ArchitecturesInstallIn64BitMode={#Archs}
 ChangesEnvironment=yes
 ; PrepareToInstall closes the tray app and stops the service itself.
-; Restart Manager cannot close the tray app, which shows no window.
+; Restart Manager closes apps through their windows, and the tray app shows
+; none: it ends when CloseTray sets its exit event.
 CloseApplications=no
 UninstallDisplayIcon={app}\cheesecloth.exe
 OutputBaseFilename=cheesecloth-{#Version}-windows-{#Arch}-setup
@@ -112,7 +113,14 @@ const
   { How long to wait for cheesecloth.exe to be free before asking, in ms. }
   InUseWait = 5000;
   InUseMessage = 'cheesecloth.exe is in use, for example by Event Viewer showing cheesecloth''s events.';
-  WM_CLOSE = $0010;
+  { The tray app ends when this event is set. Matches ExitEventName in
+    tray/Program.cs. }
+  TrayExitEvent = 'Local\CheeseclothTrayExit';
+  TrayInUseMessage = 'The Cheesecloth tray app is open. Close it in every signed-in session ' +
+    '("Close Tray Application" in its menu), then try again.';
+
+  EVENT_MODIFY_STATE = $0002;
+  ERROR_FILE_NOT_FOUND = 2;
 
   SC_MANAGER_CONNECT = $0001;
   SERVICE_CHANGE_CONFIG = $0002;
@@ -170,6 +178,12 @@ function SetFileInformationByHandle(F: Int64; InfoClass: Integer; var Info: Byte
   external 'SetFileInformationByHandle@kernel32.dll stdcall';
 function CloseHandle(Handle: Int64): BOOL;
   external 'CloseHandle@kernel32.dll stdcall';
+
+{ What CloseTray needs. OpenEvent returns 0 on failure. }
+function OpenEvent(Access: DWORD; Inherit: BOOL; Name: String): Int64;
+  external 'OpenEventW@kernel32.dll stdcall';
+function SetEvent(Event: Int64): BOOL;
+  external 'SetEvent@kernel32.dll stdcall';
 
 var
   { The error that stopped the service setup, if any. }
@@ -535,19 +549,39 @@ begin
   end;
 end;
 
+{ Asks the tray app in this session to end, by setting its exit event. The
+  event does not exist if no tray app runs in this session. }
+procedure SignalTray;
+var
+  Event: Int64;
+  Error: Integer;
+begin
+  Event := OpenEvent(EVENT_MODIFY_STATE, False, TrayExitEvent);
+  if Event = 0 then
+  begin
+    Error := DLLGetLastError;
+    if Error <> ERROR_FILE_NOT_FOUND then
+      RaiseException('Opening the tray app''s exit event failed: ' + SysErrorMessage(Error));
+    Exit;
+  end;
+  try
+    if not SetEvent(Event) then
+      RaiseException('Setting the tray app''s exit event failed: ' + SysErrorMessage(DLLGetLastError));
+  finally
+    CloseHandle(Event);
+  end;
+end;
+
 { Closes the tray app in this session, before Setup or the uninstaller stops
   the service. If another session still uses it, raises an error, so the
   caller stops before it changes anything and the user can close it there. }
 procedure CloseTray;
 var
-  Window: HWND;
   Waited: Integer;
 begin
   if not FileInUse('cheesecloth-tray.exe') then
     Exit;
-  Window := FindWindowByWindowName('Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5');
-  if Window <> 0 then
-    PostMessage(Window, WM_CLOSE, 0, 0);
+  SignalTray;
   Waited := 0;
   while FileInUse('cheesecloth-tray.exe') and (Waited < InUseWait) do
   begin
@@ -555,7 +589,7 @@ begin
     Waited := Waited + 500;
   end;
   if FileInUse('cheesecloth-tray.exe') then
-    RaiseException('Close Cheesecloth in every signed-in session, then try again.');
+    RaiseException(TrayInUseMessage);
 end;
 
 { The folder Setup would install into, if /DIR= named one other than

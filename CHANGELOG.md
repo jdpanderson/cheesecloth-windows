@@ -21,10 +21,13 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ### Changed
 
-- Setup closes the tray app itself before an upgrade, as the uninstaller
-  does, instead of with Restart Manager. If the tray app is open in another
-  user's session, Setup stops before it changes anything and asks to close
-  it there.
+- Setup and the uninstaller close the tray app by setting an event that it
+  waits for, instead of with Restart Manager or through a window. If the
+  tray app is open in another user's session, they stop before they change
+  anything and ask to close it there.
+- An older tray app does not know this event. To upgrade from an earlier
+  release, close the tray app first ("Close Tray Application" in its menu),
+  or Setup asks you to.
 
 ## [0.5.0-beta.1-1] - 2026-10-15
 
