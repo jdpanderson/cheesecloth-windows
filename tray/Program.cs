@@ -35,9 +35,9 @@ internal sealed class TrayContext : ApplicationContext
 
     public TrayContext()
     {
-        // Restart Manager sends WM_CLOSE during an upgrade. This hidden
-        // window lets Windows close the tray app without showing a window.
-        // It is not MainForm, because Application.Run shows MainForm.
+        // Setup and the uninstaller find this hidden window by its title and
+        // send it WM_CLOSE, which ends the app. It is not MainForm, because
+        // Application.Run shows MainForm.
         host = new Form { Text = "Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5", ShowInTaskbar = false };
         host.FormClosed += (_, _) => ExitThread();
         _ = host.Handle;

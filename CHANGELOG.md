@@ -19,6 +19,13 @@ names the cheesecloth version it packages plus a package revision, such as
 - The tray app no longer opens an empty "Cheesecloth tray" window when it
   starts.
 
+### Changed
+
+- Setup closes the tray app itself before an upgrade, as the uninstaller
+  does, instead of with Restart Manager. If the tray app is open in another
+  user's session, Setup stops before it changes anything and asks to close
+  it there.
+
 ## [0.5.0-beta.1-1] - 2026-10-15
 
 ### Added
