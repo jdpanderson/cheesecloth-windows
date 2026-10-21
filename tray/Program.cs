@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Windows.Forms;
 
@@ -23,8 +25,13 @@ internal sealed class TrayContext : ApplicationContext
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr handle);
 
+    // Setup and the uninstaller set this event to end the app. Matches
+    // TrayExitEvent in cheesecloth.iss.
+    private const string ExitEventName = @"Local\CheeseclothTrayExit";
+
     private readonly DaemonClient client = new();
-    private readonly Form host;
+    private readonly EventWaitHandle exitEvent;
+    private readonly RegisteredWaitHandle exitWait;
     private readonly NotifyIcon icon;
     private readonly Icon trayIcon;
     private readonly ContextMenuStrip menu = new();
@@ -35,12 +42,12 @@ internal sealed class TrayContext : ApplicationContext
 
     public TrayContext()
     {
-        // Setup and the uninstaller find this hidden window by its title and
-        // send it WM_CLOSE, which ends the app. It is not MainForm, because
-        // Application.Run shows MainForm.
-        host = new Form { Text = "Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5", ShowInTaskbar = false };
-        host.FormClosed += (_, _) => ExitThread();
-        _ = host.Handle;
+        // The menu, a control, installed this context for the UI thread.
+        var ui = SynchronizationContext.Current
+            ?? throw new InvalidOperationException("the tray app has no UI synchronization context");
+        exitEvent = CreateExitEvent();
+        exitWait = ThreadPool.RegisterWaitForSingleObject(exitEvent,
+            (_, _) => ui.Post(_ => ExitThread(), null), null, Timeout.Infinite, executeOnlyOnce: true);
         trayIcon = DrawIcon();
         icon = new NotifyIcon { Icon = trayIcon, Text = "Cheesecloth", Visible = true, ContextMenuStrip = menu };
         icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) menu.Show(Cursor.Position); };
@@ -53,6 +60,19 @@ internal sealed class TrayContext : ApplicationContext
         };
         menu.Closed += (_, _) => timer.Stop();
         timer.Tick += async (_, _) => await RefreshAsync();
+    }
+
+    // Setup runs elevated, maybe as another user than this app's, so
+    // Administrators may set the event too.
+    private static EventWaitHandle CreateExitEvent()
+    {
+        var security = new EventWaitHandleSecurity();
+        security.AddAccessRule(new EventWaitHandleAccessRule(
+            WindowsIdentity.GetCurrent().User!, EventWaitHandleRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new EventWaitHandleAccessRule(
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+            EventWaitHandleRights.Modify | EventWaitHandleRights.Synchronize, AccessControlType.Allow));
+        return EventWaitHandleAcl.Create(false, EventResetMode.ManualReset, ExitEventName, out _, security);
     }
 
     private static Icon DrawIcon()
@@ -230,7 +250,8 @@ internal sealed class TrayContext : ApplicationContext
         trayIcon.Dispose();
         menu.Dispose();
         timer.Dispose();
-        host.Dispose();
+        exitWait.Unregister(null);
+        exitEvent.Dispose();
         base.ExitThreadCore();
     }
 }
