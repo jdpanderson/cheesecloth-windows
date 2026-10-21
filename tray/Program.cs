@@ -24,6 +24,7 @@ internal sealed class TrayContext : ApplicationContext
     private static extern bool DestroyIcon(IntPtr handle);
 
     private readonly DaemonClient client = new();
+    private readonly Form host;
     private readonly NotifyIcon icon;
     private readonly Icon trayIcon;
     private readonly ContextMenuStrip menu = new();
@@ -36,9 +37,10 @@ internal sealed class TrayContext : ApplicationContext
     {
         // Restart Manager sends WM_CLOSE during an upgrade. This hidden
         // window lets Windows close the tray app without showing a window.
-        var host = new Form { Text = "Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5", ShowInTaskbar = false };
+        // It is not MainForm, because Application.Run shows MainForm.
+        host = new Form { Text = "Cheesecloth tray CFACBA51-554C-488D-B946-84F644BFB8D5", ShowInTaskbar = false };
+        host.FormClosed += (_, _) => ExitThread();
         _ = host.Handle;
-        MainForm = host;
         trayIcon = DrawIcon();
         icon = new NotifyIcon { Icon = trayIcon, Text = "Cheesecloth", Visible = true, ContextMenuStrip = menu };
         icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) menu.Show(Cursor.Position); };
@@ -228,6 +230,7 @@ internal sealed class TrayContext : ApplicationContext
         trayIcon.Dispose();
         menu.Dispose();
         timer.Dispose();
+        host.Dispose();
         base.ExitThreadCore();
     }
 }
