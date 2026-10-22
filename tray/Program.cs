@@ -25,6 +25,9 @@ internal sealed class TrayContext : ApplicationContext
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr handle);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
     // Setup and the uninstaller set this event to end the app. Matches
     // TrayExitEvent in cheesecloth.iss.
     private const string ExitEventName = @"Local\CheeseclothTrayExit";
@@ -50,7 +53,7 @@ internal sealed class TrayContext : ApplicationContext
             (_, _) => ui.Post(_ => ExitThread(), null), null, Timeout.Infinite, executeOnlyOnce: true);
         trayIcon = DrawIcon();
         icon = new NotifyIcon { Icon = trayIcon, Text = "Cheesecloth", Visible = true, ContextMenuStrip = menu };
-        icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) menu.Show(Cursor.Position); };
+        icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
         menu.Opening += async (_, _) =>
         {
             menu.Items.Clear();
@@ -118,6 +121,16 @@ internal sealed class TrayContext : ApplicationContext
         var owned = (Icon)borrowed.Clone();
         DestroyIcon(handle);
         return owned;
+    }
+
+    // The menu closes on a click outside it only while this app is in the
+    // foreground. NotifyIcon does this for the right-click menu; a left click
+    // must do it too. The shell lets the app take the foreground after a
+    // click on its icon.
+    private void ShowMenu()
+    {
+        SetForegroundWindow(menu.Handle);
+        menu.Show(Cursor.Position);
     }
 
     private ToolStripMenuItem Add(string text, Action? action, bool enabled = true)

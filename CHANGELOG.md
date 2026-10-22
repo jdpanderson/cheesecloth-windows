@@ -7,6 +7,11 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Fixed
+
+- The tray menu opened with a left click now closes when you click outside
+  it, as the right-click menu does.
+
 ## [0.5.0-beta.2-2] - 2026-10-21
 
 ### Fixed
