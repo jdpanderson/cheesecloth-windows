@@ -7,6 +7,19 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.4-2] - 2026-10-22
+
+### Changed
+
+- The tray app's Peers table looks like the GNOME app's. It shows roles and
+  permissions as icons, the path state as a colored dot, and the actions as
+  a flat button, each with a tooltip. It has a Present column, and light
+  gray lines between rows only.
+
+### Fixed
+
+- The Peers table fills the window and resizes with it.
+
 ## [0.5.0-beta.4-1] - 2026-10-22
 
 ### Added
