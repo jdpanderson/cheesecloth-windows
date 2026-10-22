@@ -7,6 +7,13 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.2-2] - 2026-10-21
+
+### Fixed
+
+- The tray menu no longer fails when the daemon's status has no warnings
+  list.
+
 ## [0.5.0-beta.2-1] - 2026-10-21
 
 ### Fixed
@@ -18,8 +25,6 @@ names the cheesecloth version it packages plus a package revision, such as
   fashion", and the tray app's commands failed.
 - The tray app no longer opens an empty "Cheesecloth tray" window when it
   starts.
-- The tray menu no longer fails when the daemon's status has no warnings
-  list.
 
 ### Changed
 
