@@ -90,6 +90,209 @@ function TheService {
     Get-CimInstance Win32_Service -Filter "Name = 'cheesecloth'"
 }
 
+# Starts a program as an administrator who is not elevated: with a copy of
+# this process's token that holds Administrators for deny only, has no
+# privileges and Medium integrity, and lets the user open the new process,
+# as the token that UAC gives does.
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class NotElevated
+{
+    private const uint TokenAssignPrimary = 0x1, TokenDuplicate = 0x2, TokenQuery = 0x8;
+    private const uint TokenAdjustDefault = 0x80;
+    private const int TokenDefaultDacl = 6, TokenIntegrityLevel = 25;
+    private const uint SeGroupIntegrity = 0x20;
+    private const uint DisableMaxPrivilege = 0x1;
+    private const int WinBuiltinAdministratorsSid = 26;
+    private const uint HandleFlagInherit = 0x1;
+    private const uint StartfUseStdHandles = 0x100;
+    private const uint CreateNoWindow = 0x08000000;
+    private const uint Infinite = 0xFFFFFFFF;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SidAndAttributes { public IntPtr Sid; public uint Attributes; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct StartupInfo
+    {
+        public int cb;
+        public string lpReserved, lpDesktop, lpTitle;
+        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute;
+        public uint dwFlags;
+        public short wShowWindow, cbReserved2;
+        public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessInformation { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool CreateWellKnownSid(int type, IntPtr domain, byte[] sid, ref uint size);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool CreateRestrictedToken(IntPtr token, uint flags, uint disableCount,
+        SidAndAttributes[] disable, uint deleteCount, IntPtr delete, uint restrictCount, IntPtr restrict,
+        out IntPtr restricted);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool CreateProcessAsUserW(IntPtr token, string application, StringBuilder commandLine,
+        IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, uint flags, IntPtr environment,
+        string directory, ref StartupInfo startup, out ProcessInformation process);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr LocalFree(IntPtr memory);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, uint revision,
+        out IntPtr sd, IntPtr size);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetSecurityDescriptorDacl(IntPtr sd, out bool present, out IntPtr dacl,
+        out bool defaulted);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool ConvertStringSidToSidW(string sid, out IntPtr psid);
+    [DllImport("advapi32.dll")]
+    private static extern uint GetLengthSid(IntPtr sid);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool SetTokenInformation(IntPtr token, int infoClass, ref IntPtr info, uint size);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool SetTokenInformation(IntPtr token, int infoClass, ref SidAndAttributes info,
+        uint size);
+
+    private static void Ok(bool ok, string what)
+    {
+        if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error(), what);
+    }
+
+    // Runs commandLine, with its output and errors in outPath, and returns
+    // its exit code. user is the SID of this process's user.
+    public static uint Run(string commandLine, string outPath, string user)
+    {
+        var restricted = RestrictedToken(user);
+        try
+        {
+            using var output = File.Create(outPath);
+            var handle = output.SafeFileHandle.DangerousGetHandle();
+            Ok(SetHandleInformation(handle, HandleFlagInherit, HandleFlagInherit), "SetHandleInformation");
+            var startup = new StartupInfo
+            {
+                cb = Marshal.SizeOf<StartupInfo>(),
+                dwFlags = StartfUseStdHandles,
+                hStdOutput = handle,
+                hStdError = handle,
+            };
+            Ok(CreateProcessAsUserW(restricted, null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero,
+                true, CreateNoWindow, IntPtr.Zero, null, ref startup, out var process), "CreateProcessAsUser");
+            try
+            {
+                WaitForSingleObject(process.hProcess, Infinite);
+                Ok(GetExitCodeProcess(process.hProcess, out var code), "GetExitCodeProcess");
+                return code;
+            }
+            finally
+            {
+                CloseHandle(process.hThread);
+                CloseHandle(process.hProcess);
+            }
+        }
+        finally
+        {
+            CloseHandle(restricted);
+        }
+    }
+
+    private static IntPtr RestrictedToken(string user)
+    {
+        Ok(OpenProcessToken(GetCurrentProcess(),
+            TokenAssignPrimary | TokenDuplicate | TokenQuery | TokenAdjustDefault, out var token),
+            "OpenProcessToken");
+        var admins = new byte[68];
+        var size = (uint)admins.Length;
+        var pin = GCHandle.Alloc(admins, GCHandleType.Pinned);
+        IntPtr restricted;
+        try
+        {
+            Ok(CreateWellKnownSid(WinBuiltinAdministratorsSid, IntPtr.Zero, admins, ref size), "CreateWellKnownSid");
+            var disable = new[] { new SidAndAttributes { Sid = pin.AddrOfPinnedObject() } };
+            Ok(CreateRestrictedToken(token, DisableMaxPrivilege, 1, disable, 0, IntPtr.Zero, 0, IntPtr.Zero,
+                out restricted), "CreateRestrictedToken");
+        }
+        finally
+        {
+            pin.Free();
+            CloseHandle(token);
+        }
+        try
+        {
+            SetDefaultDacl(restricted, user);
+            SetMediumIntegrity(restricted);
+            return restricted;
+        }
+        catch
+        {
+            CloseHandle(restricted);
+            throw;
+        }
+    }
+
+    // The default access list of an elevated token allows only SYSTEM and
+    // Administrators, so a process with Administrators for deny only could
+    // not open itself, and would fail to start. UAC gives the user's own
+    // token one that allows the user.
+    private static void SetDefaultDacl(IntPtr token, string user)
+    {
+        Ok(ConvertStringSecurityDescriptorToSecurityDescriptorW($"D:(A;;GA;;;SY)(A;;GA;;;{user})", 1,
+            out var sd, IntPtr.Zero), "ConvertStringSecurityDescriptorToSecurityDescriptor");
+        try
+        {
+            Ok(GetSecurityDescriptorDacl(sd, out _, out var dacl, out _), "GetSecurityDescriptorDacl");
+            Ok(SetTokenInformation(token, TokenDefaultDacl, ref dacl, (uint)IntPtr.Size), "SetTokenInformation");
+        }
+        finally
+        {
+            LocalFree(sd);
+        }
+    }
+
+    // UAC gives the user's own token Medium integrity.
+    private static void SetMediumIntegrity(IntPtr token)
+    {
+        Ok(ConvertStringSidToSidW("S-1-16-8192", out var medium), "ConvertStringSidToSid");
+        try
+        {
+            var label = new SidAndAttributes { Sid = medium, Attributes = SeGroupIntegrity };
+            var size = (uint)Marshal.SizeOf<SidAndAttributes>() + GetLengthSid(medium);
+            Ok(SetTokenInformation(token, TokenIntegrityLevel, ref label, size), "SetTokenInformation");
+        }
+        finally
+        {
+            LocalFree(medium);
+        }
+    }
+}
+'@
+
+# Runs the installed CLI as an administrator who is not elevated. Returns its
+# exit code and its output.
+function RunCliNotElevated {
+    $out = Join-Path $work 'not-elevated.txt'
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $code = [NotElevated]::Run("`"$cli`" $args", $out, $user)
+    [pscustomobject]@{ Code = $code; Output = (Get-Content -Raw $out) }
+}
+
 function CheckOptions([string] $opts, [string] $what) {
     $command = "`"$cli`" daemon$opts"
     Check ((TheService).PathName -eq $command) "$what ($command)"
@@ -241,6 +444,18 @@ WaitUntil 'userspace WireGuard on cheesecloth0' {
     $s -and $s.wg_backend -eq 'userspace' -and $s.wg_interface -eq 'cheesecloth0'
 }
 Check (HasEvent 4 'cheesecloth daemon starting') 'the start is in the Event Log'
+
+# The tray app runs as the signed-in user, so for an administrator it is not
+# elevated. Such a client may not open the service's process or the state
+# directory, and may do all but stop.
+$run = RunCliNotElevated --json status
+if ($run.Code -ne 0) { Write-Host "exit code $('0x{0:X8}' -f $run.Code): $($run.Output)" }
+Check ($run.Code -eq 0) 'status works for an administrator who is not elevated'
+$run = RunCliNotElevated --json stop
+$refused = $run.Code -ne 0 -and $run.Output -match '"code":\s*"permission_denied"'
+if (-not $refused) { Write-Host "exit code $('0x{0:X8}' -f $run.Code): $($run.Output)" }
+Check $refused 'stop is refused for an administrator who is not elevated'
+Check ((TheService).State -eq 'Running') 'the service runs after the refused stop'
 
 Stop-Service cheesecloth
 $service = TheService
