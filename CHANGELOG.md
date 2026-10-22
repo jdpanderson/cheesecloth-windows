@@ -7,6 +7,16 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.5-1] - 2026-10-22
+
+### Fixed
+
+- The service starts again after it stopped while in a cluster. Before,
+  each start failed with "interface cheesecloth0 still exists; another
+  program may own it", even after a restart. The installer packages
+  cheesecloth 0.5.0-beta.5, which ignores a Wintun adapter that is not
+  present.
+
 ## [0.5.0-beta.4-2] - 2026-10-22
 
 ### Changed
