@@ -7,8 +7,14 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.3-1] - 2026-10-21
+
 ### Fixed
 
+- The tray app works for an administrator without elevation. It showed "Not
+  responding" with "Access is denied", because the CLI could not find the
+  daemon's pipe. The installer packages cheesecloth 0.5.0-beta.3, which finds
+  the pipe without opening the state directory.
 - The tray menu opened with a left click now closes when you click outside
   it, as the right-click menu does.
 
