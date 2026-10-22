@@ -131,10 +131,13 @@ internal static class Program
             }
             if (control is DataGridView grid && string.IsNullOrWhiteSpace(grid.AccessibilityObject.Name))
                 throw new Exception($"{name} at {scale:P0}: the member table has no accessible name");
-            if (control is ListBox list && string.IsNullOrWhiteSpace(list.AccessibilityObject.Name))
-                throw new Exception($"{name} at {scale:P0}: the section list has no accessible name");
-            if (control is ListBox sectionList && sectionList.ItemHeight < sectionList.Font.Height * 2 + 12)
-                throw new Exception($"{name} at {scale:P0}: a section cannot show its name and health");
+            if (control is ListBox list)
+            {
+                if (string.IsNullOrWhiteSpace(list.AccessibilityObject.Name))
+                    throw new Exception($"{name} at {scale:P0}: the section list has no accessible name");
+                if (list.ItemHeight < list.Font.Height * 2 + 12)
+                    throw new Exception($"{name} at {scale:P0}: a section cannot show its name and health");
+            }
         }
         if (name is "confirmation" or "operation" &&
             !Descendants(page).OfType<Panel>().Any(panel => panel.AutoScroll &&

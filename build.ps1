@@ -15,7 +15,8 @@ param(
     [string] $Version,
     [string] $OutDir = 'dist',
     # A command that signs the file $f, for Inno's SignTool. It signs
-    # cheesecloth.exe, the uninstaller and the installer. See sign.ps1.
+    # cheesecloth.exe, the tray app, the uninstaller and the installer. See
+    # sign.ps1.
     [string] $SignTool
 )
 $ErrorActionPreference = 'Stop'

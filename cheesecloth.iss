@@ -110,7 +110,7 @@ const
     set up. }
   ServiceSetupFailed = 10;
   EnvironmentKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
-  { How long to wait for cheesecloth.exe to be free before asking, in ms. }
+  { How long to wait for an installed file to be free, in ms. }
   InUseWait = 5000;
   InUseMessage = 'cheesecloth.exe is in use, for example by Event Viewer showing cheesecloth''s events.';
   { The tray app ends when this event is set. Matches ExitEventName in
@@ -532,20 +532,19 @@ begin
   end;
 end;
 
-{ Waits up to InUseWait for cheesecloth.exe to be free, since a program
-  that read cheesecloth's events may hold it for a moment. Returns whether
+{ Waits up to InUseWait for an installed file to be free. Returns whether
   it is free. }
-function WaitForExe: Boolean;
+function WaitUntilFree(Name: String): Boolean;
 var
   Waited: Integer;
 begin
   Waited := 0;
-  Result := not FileInUse('cheesecloth.exe');
+  Result := not FileInUse(Name);
   while not Result and (Waited < InUseWait) do
   begin
     Sleep(500);
     Waited := Waited + 500;
-    Result := not FileInUse('cheesecloth.exe');
+    Result := not FileInUse(Name);
   end;
 end;
 
@@ -576,19 +575,11 @@ end;
   the service. If another session still uses it, raises an error, so the
   caller stops before it changes anything and the user can close it there. }
 procedure CloseTray;
-var
-  Waited: Integer;
 begin
   if not FileInUse('cheesecloth-tray.exe') then
     Exit;
   SignalTray;
-  Waited := 0;
-  while FileInUse('cheesecloth-tray.exe') and (Waited < InUseWait) do
-  begin
-    Sleep(500);
-    Waited := Waited + 500;
-  end;
-  if FileInUse('cheesecloth-tray.exe') then
+  if not WaitUntilFree('cheesecloth-tray.exe') then
     RaiseException(TrayInUseMessage);
 end;
 
@@ -629,7 +620,9 @@ begin
     Result := 'The cheesecloth service could not be stopped: ' + GetExceptionMessage;
     Exit;
   end;
-  while not WaitForExe do
+  { A program that read cheesecloth's events may hold cheesecloth.exe for a
+    moment. }
+  while not WaitUntilFree('cheesecloth.exe') do
     if SuppressibleMsgBox(InUseMessage + ' Close that program, then click Retry.',
       mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY then
     begin

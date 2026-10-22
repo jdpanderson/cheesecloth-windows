@@ -90,6 +90,25 @@ function TheService {
     Get-CimInstance Win32_Service -Filter "Name = 'cheesecloth'"
 }
 
+function CheckOptions([string] $opts, [string] $what) {
+    $command = "`"$cli`" daemon$opts"
+    Check ((TheService).PathName -eq $command) "$what ($command)"
+}
+
+# Starts the tray app, checks that it runs ($runs names that check), then
+# runs $during with the tray process. It stops the tray app at the end if it
+# still runs.
+function WithTray([string] $runs, [scriptblock] $during) {
+    $trayProcess = Start-Process $tray -PassThru
+    try {
+        Start-Sleep -Seconds 2
+        Check (-not $trayProcess.HasExited) $runs
+        & $during $trayProcess
+    } finally {
+        if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
+    }
+}
+
 # The messages of cheesecloth's events at $level since the start, one string
 # for each event ('' if it has no message). A child process reads them:
 # reading a message loads cheesecloth.exe, the source's message file, and the
@@ -134,11 +153,6 @@ if ($LASTEXITCODE -ne 0) { throw "$Exe --version failed" }
 $numericVersion = $version -replace '-.*$', ''
 New-Item -ItemType Directory -Force $work | Out-Null
 
-function CheckOptions([string] $opts, [string] $what) {
-    $command = "`"$cli`" daemon$opts"
-    Check ((TheService).PathName -eq $command) "$what ($command)"
-}
-
 Write-Host '== Install'
 Install $Setup 'install' -More '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
 CheckOptions ' --no-port-mapping --log info' 'the service has the options'
@@ -152,15 +166,11 @@ foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll') {
 }
 Check (Select-String -Path (Join-Path $app 'THIRD-PARTY-NOTICES.md') -Pattern '## Wintun' -SimpleMatch -Quiet) 'the notices include Wintun'
 Check ((Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' 'cheesecloth') -eq "`"$tray`"") 'the tray app starts at sign-in'
-$trayProcess = Start-Process $tray -PassThru
-try {
-    Start-Sleep -Seconds 2
-    Check (-not $trayProcess.HasExited) 'the tray app runs'
+WithTray 'the tray app runs' {
+    param($trayProcess)
     # MainWindowHandle is 0 when the process shows no window.
     $trayProcess.Refresh()
     Check ($trayProcess.MainWindowHandle -eq 0) 'the tray app shows no window'
-} finally {
-    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
 }
 
 $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -256,14 +266,10 @@ $upgradeDir = Join-Path $work 'upgrade'
 & (Join-Path $PSScriptRoot 'build.ps1') -Arch $Arch -Exe $Exe -Source $Source -Version $next -OutDir $upgradeDir
 $upgrade = Join-Path $upgradeDir "cheesecloth-$next-windows-$Arch-setup.exe"
 $old = (TheService).ProcessId
-$trayProcess = Start-Process $tray -PassThru
-try {
-    Start-Sleep -Seconds 2
-    Check (-not $trayProcess.HasExited) 'the tray app runs before the upgrade'
+WithTray 'the tray app runs before the upgrade' {
+    param($trayProcess)
     Install $upgrade 'upgrade'
     Check $trayProcess.HasExited 'the upgrade closed the tray app'
-} finally {
-    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
 }
 $entries = @(UninstallEntries)
 Check ($entries.Count -eq 1) 'the upgrade replaced the old install'
@@ -362,16 +368,12 @@ $quiet = Get-ItemPropertyValue $uninstallKey 'QuietUninstallString'
 if ($quiet -notmatch '^"([^"]+)"\s*(.*)$') { throw "unexpected QuietUninstallString: $quiet" }
 $uninstaller = $Matches[1]
 $arguments = "$($Matches[2]) /SUPPRESSMSGBOXES `"/LOG=$(Join-Path $work 'uninstall.log')`""
-$trayProcess = Start-Process $tray -PassThru
-try {
-    Start-Sleep -Seconds 2
-    Check (-not $trayProcess.HasExited) 'the tray app runs before uninstall'
+WithTray 'the tray app runs before uninstall' {
+    param($trayProcess)
     Write-Host "running $uninstaller $arguments"
     $process = Start-Process $uninstaller -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "the uninstaller exited with $($process.ExitCode)" }
     Check $trayProcess.HasExited 'uninstall closed the tray app'
-} finally {
-    if (-not $trayProcess.HasExited) { Stop-Process -Id $trayProcess.Id -Force }
 }
 Check ($null -eq (Get-Service cheesecloth -ErrorAction SilentlyContinue)) 'the service is gone'
 $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')

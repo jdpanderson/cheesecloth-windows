@@ -18,6 +18,8 @@ names the cheesecloth version it packages plus a package revision, such as
   fashion", and the tray app's commands failed.
 - The tray app no longer opens an empty "Cheesecloth tray" window when it
   starts.
+- The tray menu no longer fails when the daemon's status has no warnings
+  list.
 
 ### Changed
 

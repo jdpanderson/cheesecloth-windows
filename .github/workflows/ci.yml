@@ -173,8 +173,9 @@ jobs:
           path: target/release/cheesecloth.exe
           if-no-files-found: error
 
-  # Builds the installer from the exe that the binary job built, then
-  # installs, upgrades and uninstalls it on the runner. It never runs cargo.
+  # Checks the tray app's windows, builds the installer from the binary job's
+  # exe, then installs, upgrades and uninstalls it on the runner. It never
+  # runs cargo.
   installer:
     name: Installer (${{ matrix.arch }})
     needs: [pin, binary]
