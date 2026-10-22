@@ -74,6 +74,10 @@ internal static class Program
             PeersForm.PathColor("future_state", false) != Ui.Off ||
             PeersForm.PathColor("up", true) != Ui.Off)
             throw new Exception("The tray did not use the documented peer path codes.");
+        if (!PeersForm.PathTooltip("no_path", "no path", false).StartsWith("No path\nNAT hole punching failed") ||
+            PeersForm.PathTooltip("future_state", "future state", false) != "Future state" ||
+            PeersForm.PathTooltip("up", "up", true) != "This computer")
+            throw new Exception("The tray did not explain the peer path states.");
     }
 
     // Only an admin may invite, so other members' Peers windows have no
