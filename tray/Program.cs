@@ -157,6 +157,7 @@ internal sealed class TrayContext : ApplicationContext
         if (!menu.Visible) return;
         menu.Items.Clear();
         var phase = status.Text("phase");
+        var warningCount = status.Get("warnings").Items().Count();
         string title = failure != null ?
             ErrorTitle(failure, DateTimeOffset.UtcNow - openedAt) :
             phase switch
@@ -164,7 +165,7 @@ internal sealed class TrayContext : ApplicationContext
                 "none" => "Not in a network",
                 "pending" => "Waiting for approval",
                 "stopping" => "Leaving",
-                "member" => status.Get("warnings").GetArrayLength() > 0 ? "Connected, with warnings" : "Connected",
+                "member" => warningCount > 0 ? "Connected, with warnings" : "Connected",
                 _ => "Not responding",
             };
         var header = Add($"●  Cheesecloth  •  {title}", null);
@@ -176,7 +177,6 @@ internal sealed class TrayContext : ApplicationContext
             "Not responding" or "Needs reinstall" or "Administrators only" => Ui.Broken,
             _ => Ui.Off,
         };
-        var warningCount = status.Get("warnings").ValueKind == JsonValueKind.Array ? status.Get("warnings").GetArrayLength() : 0;
         var detail = failure?.Message ?? (phase == "stopping" ? status.Get("warnings").Items().FirstOrDefault().Text() :
             phase == "member" && warningCount > 0 ? $"{status.Text("name")} • {warningCount} warning{(warningCount == 1 ? "" : "s")}" :
             phase == "member" ? $"{status.Text("name")} • {status.Number("members")} member{(status.Number("members") == 1 ? "" : "s")}" : status.Text("name"));

@@ -48,7 +48,7 @@ For a silent install, run it from an elevated shell:
 | Code | Meaning |
 | --- | --- |
 | 0 | Installed, and the service runs. |
-| 7 | The install folder is not `C:\Program Files\cheesecloth`, the service could not be stopped, or `cheesecloth.exe` is in use (see [Weak points](#weak-points)). No files have changed. |
+| 7 | The install folder is not `C:\Program Files\cheesecloth`, the tray app is open in another session, the service could not be stopped, or `cheesecloth.exe` is in use (see [Weak points](#weak-points)). No files have changed. |
 | 10 | The files are installed, but the service could not be set up or did not start. The log and the Event Log say why. |
 
 Other codes are [Inno Setup's](https://jrsoftware.org/ishelp/topic_setupexitcodes.htm).
@@ -57,8 +57,9 @@ stopped and disabled until the next install that succeeds.
 
 A newer installer upgrades in place, and running the same version again
 reinstalls it. Downgrades are not supported: an older daemon may not read the
-state files of a newer one. An upgrade closes a running tray app and opens the
-new one for the installing user when the wizard finishes.
+state files of a newer one. An upgrade closes a running tray app in the
+current session and opens the new one for the installing user when the
+wizard finishes. Users in other signed-in sessions must quit it first.
 
 The installer also sets the service's restart on failure (after 5 seconds)
 and gives the daemon 30 seconds to stop at system shutdown.
@@ -141,8 +142,10 @@ and cluster state; delete it to forget the node. Leave the cluster first with
 
 In CI (`.github/workflows/ci.yml`), the `binary` job gets the pinned
 `cheesecloth.exe` (see [the pin file](#the-pin-file)). The `installer` job
-then builds and checks the installers: `build.ps1` builds one, and
-`check.ps1` installs, upgrades, reinstalls and uninstalls it on the runner.
+then runs the tray app's layout checks (see
+[WINDOWS-UX-VALIDATION.md](WINDOWS-UX-VALIDATION.md)), and builds and checks
+the installers: `build.ps1` builds one, and `check.ps1` installs, upgrades,
+reinstalls and uninstalls it on the runner.
 
 To build one by hand, with Inno Setup and the .NET 10 SDK on PATH and a cheesecloth checkout
 beside this one, at the commit or tag of the exe:
@@ -225,7 +228,8 @@ that beta). The setup file name and the Uninstall entry keep the full version.
 
 ### Signing
 
-The `sign` job signs `cheesecloth.exe`, the uninstaller and the installer.
+The `sign` job signs `cheesecloth.exe`, the tray app, the uninstaller and
+the installer.
 It runs on a fresh runner after the `installer` job passes, because that job
 ran our binary as a service, so its runner is not trusted with the key. The
 `sign` job never runs cargo or our binary. Then the `check-signed` job checks
@@ -273,8 +277,8 @@ key.
 rebuilds the installer with Inno Setup's Sign Tool
 (`signtool sign /sha1 <thumbprint> /fd SHA256 /tr <timestamp server>`), and
 removes the certificate. A rebuild is needed because Inno signs the
-uninstaller while it compiles. Then `verify.ps1` checks that `cheesecloth.exe`
-and the installer have valid signatures made with `signing.cer`. Windows does
+uninstaller while it compiles. Then `verify.ps1` checks that `cheesecloth.exe`,
+the tray app and the installer have valid signatures made with `signing.cer`. Windows does
 not trust a self-signed certificate, so `verify.ps1` adds it to the machine's
 trusted root certificates for the check only. This needs an administrator.
 

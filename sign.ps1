@@ -1,6 +1,6 @@
 # Signs the Windows installer: it rebuilds dist\cheesecloth-<v>-windows-<arch>-setup.exe
-# with Inno's SignTool, which signs cheesecloth.exe, the uninstaller and the
-# installer. WINDOWS_SIGNING_CERT (a base64 PFX file) and
+# with Inno's SignTool, which signs cheesecloth.exe, the tray app, the
+# uninstaller and the installer. WINDOWS_SIGNING_CERT (a base64 PFX file) and
 # WINDOWS_SIGNING_PASSWORD come from the environment. It never runs
 # cheesecloth.exe. CI runs it in its own job, on a runner where neither cargo
 # nor our binary has run.
