@@ -7,6 +7,21 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.4-1] - 2026-10-22
+
+### Added
+
+- The installer checks run the CLI as an administrator who is not elevated,
+  against the service, as the tray app does.
+
+### Fixed
+
+- The tray app works for an administrator without elevation. 0.5.0-beta.3-1
+  did not fully fix this: the CLI found the daemon's pipe, but still failed
+  with "Access is denied" when it checked who serves it. The installer
+  packages cheesecloth 0.5.0-beta.4, which checks the pipe's owner instead
+  of the daemon's process.
+
 ## [0.5.0-beta.3-1] - 2026-10-21
 
 ### Fixed
