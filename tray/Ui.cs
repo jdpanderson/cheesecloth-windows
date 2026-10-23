@@ -266,6 +266,9 @@ internal sealed class StatusForm : PageForm
         DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 48, AccessibleName = "Status sections",
     };
     private readonly FlowLayoutPanel content = CreateForm.NewFlow();
+    /// The headings and rows of the shown section, in one grid so that their
+    /// columns line up.
+    private TableLayoutPanel grid = new();
     private JsonElement status;
     private readonly ToolTip tips = new();
 
@@ -357,6 +360,9 @@ internal sealed class StatusForm : PageForm
         ClearDynamicActions();
         foreach (var control in content.Controls.Cast<Control>().Where(c => c != MessageLabel).ToArray()) control.Dispose();
         content.Controls.Clear();
+        grid = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 3 };
+        for (var i = 0; i < 3; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        content.Controls.Add(grid);
         switch (((SectionChoice)sections.SelectedItem).Name)
         {
             case "Overview": Overview(); break;
@@ -373,36 +379,34 @@ internal sealed class StatusForm : PageForm
     {
         var label = Ui.Label(text, true);
         label.ForeColor = color;
-        content.Controls.Add(label);
+        var row = grid.RowCount++;
+        grid.Controls.Add(label, 0, row);
+        grid.SetColumnSpan(label, 3);
     }
 
+    /// A row of the grid: a bold name, its value, and a button that explains
+    /// it. Each cell is centered in the row's height.
     private void Row(string label, string value, string? help = null)
     {
-        var row = new TableLayoutPanel
-        {
-            Width = Math.Max(400, content.ClientSize.Width - 36), AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowOnly, ColumnCount = help == null ? 2 : 3,
-        };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 75));
-        if (help != null) row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        var row = grid.RowCount++;
         var name = Ui.Label(label, true);
-        name.Dock = DockStyle.Fill;
-        row.Controls.Add(name, 0, 0);
+        name.Anchor = AnchorStyles.Left;
+        grid.Controls.Add(name, 0, row);
         var detail = Ui.Label(value);
-        detail.MaximumSize = new Size(Math.Max(200, (int)(row.Width * 0.68f)), 0);
-        row.Controls.Add(detail, 1, 0);
+        detail.Anchor = AnchorStyles.Left;
+        detail.MaximumSize = new Size(Math.Max(200, (int)(Math.Max(400, content.ClientSize.Width - 36) * 0.68f)), 0);
+        grid.Controls.Add(detail, 1, row);
         if (help != null)
         {
             var info = Ui.Button("ⓘ", (_, _) => Ui.Message(help));
             info.Size = new Size(30, 26);
             info.MinimumSize = Size.Empty;
+            info.Anchor = AnchorStyles.Left;
             info.AccessibleName = $"About {label}";
             info.AccessibleDescription = help;
             tips.SetToolTip(info, help);
-            row.Controls.Add(info, 2, 0);
+            grid.Controls.Add(info, 2, row);
         }
-        content.Controls.Add(row);
     }
 
     private void Overview()
