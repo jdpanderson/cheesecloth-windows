@@ -7,6 +7,8 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.5-2] - 2026-10-22
+
 ### Changed
 
 - A left click on the tray icon opens the Status window, or brings it to
