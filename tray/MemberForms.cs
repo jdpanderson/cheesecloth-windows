@@ -60,6 +60,7 @@ internal sealed class PeersForm : PageForm
     private Font? iconFont;
     private int gap;
     private int hoverRow = -1;
+    private InviteForm? inviteForm;
 
     // `admin` is whether this node has the admin permission. Only an admin
     // may invite or remove, so this window otherwise offers neither.
@@ -78,7 +79,7 @@ internal sealed class PeersForm : PageForm
         top.Controls.Add(count, 0, 0);
         if (admin)
         {
-            var invite = Ui.Button("Invite…", (_, _) => new InviteForm(client).Show(this));
+            var invite = Ui.Button("Invite…", (_, _) => ShowInvite());
             invite.Anchor = AnchorStyles.Right;
             top.Controls.Add(invite, 1, 0);
         }
@@ -115,6 +116,19 @@ internal sealed class PeersForm : PageForm
         grid.CellMouseLeave += (_, _) => SetHover(-1);
         grid.CellMouseClick += OnCellClick;
         FormClosed += (_, _) => iconFont?.Dispose();
+    }
+
+    // Shows the one Invite window, opening it if it is not open.
+    private void ShowInvite()
+    {
+        if (inviteForm != null)
+        {
+            Ui.Raise(inviteForm);
+            return;
+        }
+        inviteForm = new InviteForm(Client);
+        inviteForm.FormClosed += (_, _) => inviteForm = null;
+        inviteForm.Show(this);
     }
 
     protected override async Task RefreshAsync()

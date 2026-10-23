@@ -17,6 +17,9 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ### Fixed
 
+- The Peers, Approvals, Create Network, Join Network and Invite windows
+  open once. Choosing one again brings its open window to the front, as
+  Status does.
 - The tray menu opens on the first click. Before, the first click did
   nothing, because the menu was still empty, and a menu with no items does
   not open.
