@@ -7,8 +7,17 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Changed
+
+- A left click on the tray icon opens the Status window, or brings it to
+  the front if it is open. A right click opens the menu. The Status item in
+  the menu also shows that one window.
+
 ### Fixed
 
+- The tray menu opens on the first click. Before, the first click did
+  nothing, because the menu was still empty, and a menu with no items does
+  not open.
 - In the Status window, the ⓘ buttons line up in one column, and each row's
   name, value and button are centered on the same line. Before, each row
   placed its button after its own text.
