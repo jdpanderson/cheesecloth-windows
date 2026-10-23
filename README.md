@@ -28,8 +28,9 @@ The installer uses no other folder, and refuses `/DIR=` with another one,
 because the service runs `cheesecloth.exe` as LocalSystem, and other users
 may be able to change files in another folder.
 
-The tray icon opens the network menu. Use it to create or join a network, see
-status and peers, invite a member, and approve changes. The app asks the
+A left click on the tray icon opens the Status window. A right click opens
+the network menu. Use the menu to create or join a network, see status and
+peers, invite a member, and approve changes. The app asks the
 installed CLI to use the daemon's local API. It checks only while its menu or
 a window is open. It follows the service's `--state-dir` and `--socket` options.
 Windows runs the daemon as a service even after you choose

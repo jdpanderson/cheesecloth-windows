@@ -25,9 +25,6 @@ internal sealed class TrayContext : ApplicationContext
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr window);
-
     // Setup and the uninstaller set this event to end the app. Matches
     // TrayExitEvent in cheesecloth.iss.
     private const string ExitEventName = @"Local\CheeseclothTrayExit";
@@ -42,6 +39,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly DateTimeOffset openedAt = DateTimeOffset.UtcNow;
     private bool refreshing;
     private JsonElement status;
+    private StatusForm? statusForm;
 
     public TrayContext()
     {
@@ -53,9 +51,12 @@ internal sealed class TrayContext : ApplicationContext
             (_, _) => ui.Post(_ => ExitThread(), null), null, Timeout.Infinite, executeOnlyOnce: true);
         trayIcon = DrawIcon();
         icon = new NotifyIcon { Icon = trayIcon, Text = "Cheesecloth", Visible = true, ContextMenuStrip = menu };
-        icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
-        menu.Opening += async (_, _) =>
+        icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowStatus(); };
+        menu.Opening += async (_, e) =>
         {
+            // A menu with no items cancels its opening, so the first click
+            // showed nothing. This handler fills the menu, so it opens.
+            e.Cancel = false;
             menu.Items.Clear();
             Add("Cheesecloth  •  Loading…", null, false);
             timer.Start();
@@ -123,14 +124,18 @@ internal sealed class TrayContext : ApplicationContext
         return owned;
     }
 
-    // The menu closes on a click outside it only while this app is in the
-    // foreground. NotifyIcon does this for the right-click menu; a left click
-    // must do it too. The shell lets the app take the foreground after a
-    // click on its icon.
-    private void ShowMenu()
+    // Shows the one Status window, opening it if it is not open. The shell
+    // lets the app take the foreground after a click on its icon.
+    private void ShowStatus()
     {
-        SetForegroundWindow(menu.Handle);
-        menu.Show(Cursor.Position);
+        if (statusForm is { IsDisposed: false })
+        {
+            if (statusForm.WindowState == FormWindowState.Minimized) statusForm.WindowState = FormWindowState.Normal;
+            statusForm.Activate();
+            return;
+        }
+        statusForm = new StatusForm(client);
+        Open(statusForm);
     }
 
     private ToolStripMenuItem Add(string text, Action? action, bool enabled = true)
@@ -204,11 +209,11 @@ internal sealed class TrayContext : ApplicationContext
                     Add("Join Network…", () => Open(new JoinForm(client)));
                     break;
                 case "pending":
-                    Add("Status…", () => Open(new StatusForm(client)));
+                    Add("Status…", ShowStatus);
                     Add("Cancel Join", CancelJoin);
                     break;
                 case "member":
-                    Add("Status…", () => Open(new StatusForm(client)));
+                    Add("Status…", ShowStatus);
                     var admin = status.Get("permissions").Flag("admin");
                     Add("Peers…", () => Open(new PeersForm(client, admin)));
                     if (pending > 0) Add($"Approvals ({pending})…", () => Open(new ApprovalsForm(client)));
