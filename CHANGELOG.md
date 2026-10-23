@@ -12,6 +12,8 @@ names the cheesecloth version it packages plus a package revision, such as
 - A left click on the tray icon opens the Status window, or brings it to
   the front if it is open. A right click opens the menu. The Status item in
   the menu also shows that one window.
+- The Invite button is at the right of the Peers window, as in the GNOME
+  app.
 
 ### Fixed
 

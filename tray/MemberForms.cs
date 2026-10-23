@@ -66,14 +66,22 @@ internal sealed class PeersForm : PageForm
     public PeersForm(DaemonClient client, bool admin) : base("Peers", client, 1180, 500)
     {
         this.admin = admin;
-        var top = new FlowLayoutPanel
+        // The count at the left, and the Invite button at the right.
+        var top = new TableLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
-            MinimumSize = new Size(0, 48), Padding = new Padding(8),
+            MinimumSize = new Size(0, 48), Padding = new Padding(8), ColumnCount = 2,
         };
-        top.Controls.Add(count);
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        count.Anchor = AnchorStyles.Left;
+        top.Controls.Add(count, 0, 0);
         if (admin)
-            top.Controls.Add(Ui.Button("Invite…", (_, _) => new InviteForm(client).Show(this)));
+        {
+            var invite = Ui.Button("Invite…", (_, _) => new InviteForm(client).Show(this));
+            invite.Anchor = AnchorStyles.Right;
+            top.Controls.Add(invite, 1, 0);
+        }
         var bottom = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
