@@ -7,6 +7,8 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+## [0.5.0-beta.5-3] - 2026-10-22
+
 ### Changed
 
 - The tray app's windows have the Windows 11 look: a light gray window with
