@@ -14,18 +14,13 @@ internal sealed class PeersForm : PageForm
         public string Tooltip => $"{Name}: {Meaning}";
     }
 
-    // Glyphs of Segoe Fluent Icons (Windows 11), which keeps the code points of
-    // Segoe MDL2 Assets (Windows 10).
+    // Glyphs of Segoe Fluent Icons (see Ui.IconFamily).
     private const string AdminGlyph = "\uEA18";  // Shield
     private const string VoteGlyph = "\uE73E";   // CheckMark
     private const string RelayGlyph = "\uE8AB";  // Switch
     private const string MemberGlyph = "\uE77B"; // Contact
     private const string MoreGlyph = "\uE712";   // More
-    private static readonly string IconFamily =
-        FontFamily.Families.Any(family => family.Name == "Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
-
-    // The light gray lines, the selected row and the hovered button of Windows 11 lists.
-    private static readonly Color Line = Color.FromArgb(229, 229, 229);
+    // The selected row and the hovered button of Windows 11 lists.
     private static readonly Color SelectionBack = Color.FromArgb(229, 241, 251);
     private static readonly Color Hover = Color.FromArgb(234, 234, 234);
 
@@ -48,13 +43,13 @@ internal sealed class PeersForm : PageForm
         Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
         AllowUserToDeleteRows = false, AllowUserToResizeRows = false, RowHeadersVisible = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
-        BorderStyle = BorderStyle.None, BackgroundColor = SystemColors.Window, GridColor = Line,
+        BorderStyle = BorderStyle.None, BackgroundColor = SystemColors.Window, GridColor = Ui.Line,
         CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
         EnableHeadersVisualStyles = false, ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
         AccessibleName = "Network members",
     };
-    private readonly Label count = Ui.Label("");
+    private readonly Label count = Ui.Heading("");
     private readonly bool admin;
     private JsonElement peers;
     private Font? iconFont;
@@ -64,14 +59,15 @@ internal sealed class PeersForm : PageForm
 
     // `admin` is whether this node has the admin permission. Only an admin
     // may invite or remove, so this window otherwise offers neither.
-    public PeersForm(DaemonClient client, bool admin) : base("Peers", client, 1180, 500)
+    public PeersForm(DaemonClient client, bool admin) : base("Peers", client, 1180, 540)
     {
         this.admin = admin;
+        Body.Padding = new Padding(16, 12, 16, 4);
         // The count at the left, and the Invite button at the right.
         var top = new TableLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
-            MinimumSize = new Size(0, 48), Padding = new Padding(8), ColumnCount = 2,
+            MinimumSize = new Size(0, 48), Padding = new Padding(8, 4, 8, 12), ColumnCount = 2,
         };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -79,7 +75,7 @@ internal sealed class PeersForm : PageForm
         top.Controls.Add(count, 0, 0);
         if (admin)
         {
-            var invite = Ui.Button("Invite…", (_, _) => ShowInvite());
+            var invite = Ui.Button("Invite…", (_, _) => ShowInvite(), primary: true);
             invite.Anchor = AnchorStyles.Right;
             top.Controls.Add(invite, 1, 0);
         }
@@ -89,9 +85,9 @@ internal sealed class PeersForm : PageForm
             MinimumSize = new Size(0, 48), Padding = new Padding(8),
         };
         bottom.Controls.Add(MessageLabel);
-        Controls.Add(grid);
-        Controls.Add(bottom);
-        Controls.Add(top);
+        Body.Controls.Add(grid);
+        Body.Controls.Add(bottom);
+        Body.Controls.Add(top);
 
         grid.DefaultCellStyle.BackColor = SystemColors.Window;
         grid.DefaultCellStyle.SelectionBackColor = SelectionBack;
@@ -251,7 +247,7 @@ internal sealed class PeersForm : PageForm
     private void UpdateMetrics()
     {
         iconFont?.Dispose();
-        var icon = iconFont = new Font(IconFamily, grid.Font.SizeInPoints * 1.15f);
+        var icon = iconFont = new Font(Ui.IconFamily, grid.Font.SizeInPoints * 1.15f);
         gap = grid.Font.Height / 3;
         grid.DefaultCellStyle.Padding = new Padding(gap, 0, gap, 0);
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(gap, gap, gap, gap);
@@ -276,7 +272,7 @@ internal sealed class PeersForm : PageForm
         {
             // A header with one light line below it.
             e.Paint(e.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.Border);
-            using var pen = new Pen(Line);
+            using var pen = new Pen(Ui.Line);
             graphics.DrawLine(pen, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
             e.Handled = true;
             return;
@@ -361,8 +357,8 @@ internal sealed class InviteForm : PageForm
 {
     private readonly TextBox token = new()
     {
-        Multiline = true, ReadOnly = true, Width = 430, Height = 90,
-        ScrollBars = ScrollBars.Vertical,
+        Multiline = true, ReadOnly = true, Height = 90,
+        ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle,
     };
     private readonly Label expires = Ui.Label("");
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
@@ -373,20 +369,19 @@ internal sealed class InviteForm : PageForm
     private readonly CheckBox vote = Permission("Voter: be an acceptor, and take joins to the network");
     private readonly CheckBox relay = Permission("Relay: relay messages for other members");
 
-    public InviteForm(DaemonClient client) : base("Invite", client, 500, 470)
+    public InviteForm(DaemonClient client) : base("Invite", client, 580, 620)
     {
-        var flow = CreateForm.NewFlow();
-        flow.Controls.Add(Ui.Label("An invite lets one new node join. It works once and expires after 30 minutes."));
-        flow.Controls.Add(Ui.Label("Permissions", true));
-        flow.Controls.Add(admin);
-        flow.Controls.Add(vote);
-        flow.Controls.Add(relay);
-        var hint = Ui.Label("Every member can use the network and leave. Permissions never change: to change them, the member must leave and join again.");
-        hint.ForeColor = Ui.Off;
-        flow.Controls.Add(hint);
-        create = Action("Create Invite", CreateInviteAsync);
-        flow.Controls.Add(create);
-        flow.Controls.Add(token);
+        var page = new PageLayout();
+        page.Add(Ui.Heading("Invite a member"));
+        page.Add(Ui.Note("An invite lets one new node join. It works once and expires after 30 minutes."));
+        page.Add(Ui.Separator(), stretch: true);
+        page.Add(Ui.Label("Permissions", true));
+        page.Add(admin);
+        page.Add(vote);
+        page.Add(relay);
+        page.Add(Ui.Note("Every member can use the network and leave. Permissions never change: to change them, the member must leave and join again."));
+        create = page.Add(Action("Create Invite", CreateInviteAsync, primary: true));
+        page.Add(token, stretch: true);
         var copy = Ui.Button("Copy", (_, _) =>
         {
             Clipboard.SetText(token.Text);
@@ -394,10 +389,10 @@ internal sealed class InviteForm : PageForm
         });
         copy.Enabled = false;
         token.TextChanged += (_, _) => copy.Enabled = token.Text.Length > 0;
-        flow.Controls.Add(copy);
-        flow.Controls.Add(expires);
-        flow.Controls.Add(MessageLabel);
-        Controls.Add(flow);
+        page.Add(copy);
+        page.Add(expires);
+        page.Add(MessageLabel);
+        Body.Controls.Add(page);
         countdown.Tick += (_, _) => UpdateCountdown();
         Shown += (_, _) => countdown.Start();
         FormClosed += (_, _) => countdown.Dispose();
@@ -437,58 +432,50 @@ internal sealed class InviteForm : PageForm
 
 internal sealed class ApprovalsForm : PageForm
 {
-    private readonly FlowLayoutPanel list = CreateForm.NewFlow();
+    private readonly PageLayout page = new();
 
-    public ApprovalsForm(DaemonClient client) : base("Approvals", client, 600, 500)
+    public ApprovalsForm(DaemonClient client) : base("Approvals", client, 640, 560)
     {
-        Controls.Add(list);
+        Body.Controls.Add(page);
     }
 
+    // The heading, then each proposal with its buttons, with a line between.
     protected override async Task RefreshAsync()
     {
         var pending = await Client.CallAsync("pending");
         if (IsDisposed) return;
-        list.SuspendLayout();
+        page.SuspendLayout();
         ClearDynamicActions();
-        foreach (var control in list.Controls.Cast<Control>().Where(c => c != MessageLabel).ToArray()) control.Dispose();
-        list.Controls.Clear();
-        if (pending.GetArrayLength() == 0) list.Controls.Add(Ui.Label("Nothing waits for approval."));
+        page.Clear(keep: MessageLabel);
+        page.Add(Ui.Heading("Approvals"));
+        page.Add(Ui.Note(pending.GetArrayLength() == 0 ? "Nothing waits for approval." :
+            "These changes wait for members to approve them."));
         foreach (var proposal in pending.Items())
         {
+            page.Add(Ui.Separator(), stretch: true);
             var kind = proposal.Text("kind");
-            var card = new FlowLayoutPanel
-            {
-                Width = 540, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
-                MinimumSize = new Size(540, kind == "join" ? 190 : 155), FlowDirection = FlowDirection.TopDown,
-                WrapContents = false, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(10),
-            };
             var title = kind switch
             {
                 "join" => $"Join of {proposal.Text("name")}",
                 "remove" => $"Removal of {proposal.Text("name")}",
                 _ => $"Setting {proposal.Get("setting").Text("key")} = {proposal.Get("setting").Text("value")}",
             };
-            card.Controls.Add(Ui.Label(title, true));
+            page.Add(Ui.Label(title, true));
             if (kind == "join")
             {
-                card.Controls.Add(Ui.Label($"Node ID: {proposal.Text("node")}\nCheck this ID against the one the joining node shows."));
-                card.Controls.Add(Ui.Label($"Permissions: {PeersForm.PermissionNames(proposal.Get("permissions"))}"));
+                page.Add(Ui.Label($"Node ID: {proposal.Text("node")}\nCheck this ID against the one the joining node shows."));
+                page.Add(Ui.Label($"Permissions: {PeersForm.PermissionNames(proposal.Get("permissions"))}"));
             }
             var approvals = proposal.Get("approvals").GetArrayLength();
-            card.Controls.Add(Ui.Label($"Asked by {Json.ShortId(proposal.Text("proposer"))} • {approvals} of {proposal.Number("needed")} approvals • {proposal.Number("expires_in_secs") / 60} min left"));
-            var actions = new FlowLayoutPanel
-            {
-                Width = 500, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
-                MinimumSize = new Size(500, 38),
-            };
+            page.Add(Ui.Note($"Asked by {Json.ShortId(proposal.Text("proposer"))} • {approvals} of {proposal.Number("needed")} approvals • {proposal.Number("expires_in_secs") / 60} min left"));
+            var actions = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
             var id = proposal.Text("id");
+            actions.Controls.Add(Action("Approve", () => VoteAsync("approve", id), primary: true));
             actions.Controls.Add(Action("Reject", () => VoteAsync("reject", id)));
-            actions.Controls.Add(Action("Approve", () => VoteAsync("approve", id)));
-            card.Controls.Add(actions);
-            list.Controls.Add(card);
+            page.Add(actions);
         }
-        list.Controls.Add(MessageLabel);
-        list.ResumeLayout();
+        page.Add(MessageLabel);
+        page.ResumeLayout();
     }
 
     private async Task VoteAsync(string vote, string id)

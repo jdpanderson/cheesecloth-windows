@@ -7,6 +7,19 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Changed
+
+- The tray app's windows have the Windows 11 look: a light gray window with
+  a white card with rounded corners, larger text in Segoe UI Variable, a
+  large heading, and flat rounded buttons, with the main action in the
+  accent color. With high contrast on, they use the system colors.
+- In the Status window, each section in the list has an icon in the color
+  of its health, and the selected section has a light background and an
+  accent mark. Each section's page starts with its health as a heading and
+  a sentence that says what it means.
+- The Create, Join, Invite and Approvals windows start with a heading and a
+  sentence that says what they do. In Approvals, Approve comes first.
+
 ## [0.5.0-beta.5-2] - 2026-10-22
 
 ### Changed
