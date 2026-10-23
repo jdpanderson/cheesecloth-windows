@@ -39,7 +39,8 @@ internal sealed class TrayContext : ApplicationContext
     private readonly DateTimeOffset openedAt = DateTimeOffset.UtcNow;
     private bool refreshing;
     private JsonElement status;
-    private StatusForm? statusForm;
+    // The open window of each kind. A kind has at most one window.
+    private readonly Dictionary<Type, Form> forms = [];
 
     public TrayContext()
     {
@@ -124,18 +125,22 @@ internal sealed class TrayContext : ApplicationContext
         return owned;
     }
 
-    // Shows the one Status window, opening it if it is not open. The shell
-    // lets the app take the foreground after a click on its icon.
-    private void ShowStatus()
+    private void ShowStatus() => Show(() => new StatusForm(client));
+
+    // Shows the one window of its kind, opening it if it is not open. The
+    // shell lets the app take the foreground after a click on its icon.
+    private void Show<T>(Func<T> create) where T : Form
     {
-        if (statusForm is { IsDisposed: false })
+        if (forms.TryGetValue(typeof(T), out var open))
         {
-            if (statusForm.WindowState == FormWindowState.Minimized) statusForm.WindowState = FormWindowState.Normal;
-            statusForm.Activate();
+            menu.Close();
+            Ui.Raise(open);
             return;
         }
-        statusForm = new StatusForm(client);
-        Open(statusForm);
+        var form = create();
+        forms[typeof(T)] = form;
+        form.FormClosed += (_, _) => forms.Remove(typeof(T));
+        Open(form);
     }
 
     private ToolStripMenuItem Add(string text, Action? action, bool enabled = true)
@@ -205,8 +210,8 @@ internal sealed class TrayContext : ApplicationContext
             switch (phase)
             {
                 case "none":
-                    Add("Create Network…", () => Open(new CreateForm(client)));
-                    Add("Join Network…", () => Open(new JoinForm(client)));
+                    Add("Create Network…", () => Show(() => new CreateForm(client)));
+                    Add("Join Network…", () => Show(() => new JoinForm(client)));
                     break;
                 case "pending":
                     Add("Status…", ShowStatus);
@@ -215,8 +220,8 @@ internal sealed class TrayContext : ApplicationContext
                 case "member":
                     Add("Status…", ShowStatus);
                     var admin = status.Get("permissions").Flag("admin");
-                    Add("Peers…", () => Open(new PeersForm(client, admin)));
-                    if (pending > 0) Add($"Approvals ({pending})…", () => Open(new ApprovalsForm(client)));
+                    Add("Peers…", () => Show(() => new PeersForm(client, admin)));
+                    if (pending > 0) Add($"Approvals ({pending})…", () => Show(() => new ApprovalsForm(client)));
                     break;
                 case "stopping":
                     Add("Retry Leave", RetryLeave);

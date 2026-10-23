@@ -13,6 +13,13 @@ internal static class Ui
     public static readonly Color Off = Color.DimGray;
     public static readonly Color Info = Color.SlateGray;
 
+    // Brings an open window to the front, restoring it if it is minimized.
+    public static void Raise(Form form)
+    {
+        if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
+        form.Activate();
+    }
+
     public static Label Label(string text, bool bold = false) => new()
     {
         Text = text,
