@@ -78,7 +78,7 @@ internal static class Ui
 
     public static Button Button(string text, EventHandler click, bool primary = false)
     {
-        var button = new FlatButton { Text = text, AutoSize = true, MinimumSize = new Size(100, 32), Primary = primary };
+        var button = new FlatButton(primary) { Text = text, AutoSize = true, MinimumSize = new Size(100, 32) };
         button.Click += click;
         return button;
     }
@@ -166,10 +166,11 @@ internal static class Ui
 // standard button.
 internal sealed class FlatButton : Button
 {
+    private readonly bool primary;
     private bool hover;
     private bool pressed;
 
-    public bool Primary { get; init; }
+    public FlatButton(bool primary = false) => this.primary = primary;
 
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
@@ -191,7 +192,7 @@ internal sealed class FlatButton : Button
         var box = new Rectangle(0, 0, Width - 1, Height - 1);
         var corner = new Size(4, 4);
         Color back, border, text;
-        if (Primary)
+        if (primary)
         {
             back = !Enabled ? Color.FromArgb(191, 191, 191) : pressed ? Color.FromArgb(0, 84, 166) :
                 hover ? Color.FromArgb(25, 110, 191) : Ui.Accent;
