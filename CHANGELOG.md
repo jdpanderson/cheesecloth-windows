@@ -7,6 +7,12 @@ names the cheesecloth version it packages plus a package revision, such as
 
 ## [Unreleased]
 
+### Fixed
+
+- In the Status window, the ⓘ buttons line up in one column, and each row's
+  name, value and button are centered on the same line. Before, each row
+  placed its button after its own text.
+
 ## [0.5.0-beta.5-1] - 2026-10-22
 
 ### Fixed
