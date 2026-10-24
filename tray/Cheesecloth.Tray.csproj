@@ -7,5 +7,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="TrayIcon.ico" LogicalName="Cheesecloth.Tray.TrayIcon.ico" />
+  </ItemGroup>
 </Project>
