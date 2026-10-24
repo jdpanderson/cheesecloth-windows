@@ -1,8 +1,9 @@
 # Windows tray checks
 
 The Windows tray uses the same network shape as the macOS menu bar icon in
-[`tray/menubar_template.svg`](tray/menubar_template.svg). Windows draws it in
-white on a dark disc so it remains visible on both light and dark taskbars.
+[`tray/menubar.svg`](tray/menubar.svg). Its embedded
+[`TrayIcon.ico`](tray/TrayIcon.ico) renders the mark in white on a dark disc so
+it remains visible on both light and dark taskbars.
 
 ## Automated checks
 

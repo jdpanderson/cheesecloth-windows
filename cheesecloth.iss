@@ -64,6 +64,7 @@ ChangesEnvironment=yes
 ; none: it ends when CloseTray sets its exit event.
 CloseApplications=no
 UninstallDisplayIcon={app}\cheesecloth.exe
+SetupIconFile=tray\AppIcon.ico
 OutputBaseFilename=cheesecloth-{#Version}-windows-{#Arch}-setup
 Compression=lzma2
 SolidCompression=yes

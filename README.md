@@ -155,6 +155,11 @@ beside this one, at the commit or tag of the exe:
 .\build.ps1 -Arch x64 -Exe ..\cheesecloth\target\release\cheesecloth.exe -Source ..\cheesecloth
 ```
 
+The tray app uses its checked-in `tray/menubar.svg` artwork through the
+embedded `tray/TrayIcon.ico` resource. The executable and installer icons use
+the checked-in `tray/AppIcon.ico`; `cheesecloth.exe` embeds its own copy.
+Builds use only files in their respective repositories.
+
 ### The pin file
 
 `cheesecloth.pin` names what the installer packages. It is TOML, in the

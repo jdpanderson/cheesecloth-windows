@@ -1,6 +1,4 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
@@ -22,9 +20,6 @@ internal static class Program
 
 internal sealed class TrayContext : ApplicationContext
 {
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(IntPtr handle);
-
     // Setup and the uninstaller set this event to end the app. Matches
     // TrayExitEvent in cheesecloth.iss.
     private const string ExitEventName = @"Local\CheeseclothTrayExit";
@@ -50,7 +45,7 @@ internal sealed class TrayContext : ApplicationContext
         exitEvent = CreateExitEvent();
         exitWait = ThreadPool.RegisterWaitForSingleObject(exitEvent,
             (_, _) => ui.Post(_ => ExitThread(), null), null, Timeout.Infinite, executeOnlyOnce: true);
-        trayIcon = DrawIcon();
+        trayIcon = LoadIcon();
         icon = new NotifyIcon { Icon = trayIcon, Text = "Cheesecloth", Visible = true, ContextMenuStrip = menu };
         icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowStatus(); };
         menu.Opening += async (_, e) =>
@@ -80,49 +75,11 @@ internal sealed class TrayContext : ApplicationContext
         return EventWaitHandleAcl.Create(false, EventResetMode.ManualReset, ExitEventName, out _, security);
     }
 
-    private static Icon DrawIcon()
+    private static Icon LoadIcon()
     {
-        using var bitmap = new Bitmap(32, 32);
-        using var graphics = Graphics.FromImage(bitmap);
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        // Use the same network shape as menubar_template.svg. The dark disc
-        // keeps the white shape visible on light and dark Windows taskbars.
-        using var dark = new SolidBrush(Color.FromArgb(45, 45, 45));
-        using var white = new SolidBrush(Color.White);
-        const float scale = 25f / 18f;
-        PointF P(float x, float y) => new(3.5f + x * scale, 3.5f + y * scale);
-        using var line = new Pen(Color.White, 0.675f * scale)
-        {
-            StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round,
-        };
-        using var thin = new Pen(Color.White, 0.49f * scale)
-        {
-            StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round,
-        };
-        graphics.FillEllipse(dark, 1, 1, 30, 30);
-        graphics.DrawBezier(thin, P(7.35f, 2.35f), P(5.20f, 3.35f), P(3.03f, 6.40f), P(2.05f, 11.10f));
-        graphics.DrawBezier(thin, P(7.85f, 9.55f), P(5.20f, 8.90f), P(3.04f, 9.12f), P(2.05f, 11.10f));
-        graphics.DrawBezier(line, P(7.35f, 2.35f), P(7.45f, 5.13f), P(7.81f, 7.50f), P(7.85f, 9.55f));
-        graphics.DrawBezier(line, P(7.35f, 2.35f), P(9.96f, 2.28f), P(12.17f, 4.27f), P(13.55f, 6.32f));
-        graphics.DrawBezier(line, P(7.85f, 9.55f), P(9.35f, 8.12f), P(11.37f, 6.82f), P(13.55f, 6.32f));
-        graphics.DrawBezier(line, P(7.85f, 9.55f), P(9.77f, 10.80f), P(11.87f, 11.62f), P(14.42f, 12.24f));
-        graphics.DrawBezier(line, P(13.55f, 6.32f), P(14.00f, 8.31f), P(14.36f, 10.20f), P(14.42f, 12.24f));
-        graphics.DrawBezier(thin, P(7.85f, 9.55f), P(7.30f, 11.03f), P(6.25f, 12.13f), P(5.02f, 12.92f));
-        void Node(float x, float y, float radius)
-        {
-            var center = P(x, y);
-            graphics.FillEllipse(white, center.X - radius * scale, center.Y - radius * scale,
-                2 * radius * scale, 2 * radius * scale);
-        }
-        Node(7.35f, 2.35f, 1.12f);
-        Node(7.85f, 9.55f, 1.06f);
-        Node(13.55f, 6.32f, 1.06f);
-        Node(14.42f, 12.24f, 1.06f);
-        var handle = bitmap.GetHicon();
-        using var borrowed = Icon.FromHandle(handle);
-        var owned = (Icon)borrowed.Clone();
-        DestroyIcon(handle);
-        return owned;
+        using var stream = typeof(TrayContext).Assembly.GetManifestResourceStream("Cheesecloth.Tray.TrayIcon.ico")
+            ?? throw new InvalidOperationException("TrayIcon.ico is missing from the tray app");
+        return new Icon(stream, new Size(32, 32));
     }
 
     private void ShowStatus() => Show(() => new StatusForm(client));
