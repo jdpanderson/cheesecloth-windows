@@ -43,10 +43,11 @@ $numericVersion = $Matches[1]
 $work = Join-Path $PSScriptRoot 'target\windows'
 $stage = Join-Path $work "$Arch\stage"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-New-Item -ItemType Directory -Force (Join-Path $stage 'docs') | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $stage 'docs'), (Join-Path $stage 'assets') | Out-Null
 Copy-Item $Exe (Join-Path $stage 'cheesecloth.exe')
 Copy-Item (Join-Path $Source 'README.md'), (Join-Path $Source 'LICENSE') $stage
 Copy-Item (Join-Path $Source 'docs\*.md') (Join-Path $stage 'docs')
+Copy-Item (Join-Path $Source 'assets\*.svg') (Join-Path $stage 'assets')
 
 # Build a single-file tray app for the same architecture as the daemon.
 $runtime = @{ x64 = 'win-x64'; arm64 = 'win-arm64' }[$Arch]

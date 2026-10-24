@@ -81,6 +81,7 @@ Source: "{#Stage}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Stage}\docs\*.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "{#Stage}\assets\*.svg"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 [Registry]
 ; The Event Log source. Event Viewer reads each event's text from the message

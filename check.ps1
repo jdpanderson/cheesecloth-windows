@@ -365,7 +365,7 @@ Write-Host '== Install'
 Install $Setup 'install' -More '/CHEESECLOTH_OPTS="--no-port-mapping --log info"'
 CheckOptions ' --no-port-mapping --log info' 'the service has the options'
 Check ((Get-Item $Setup).VersionInfo.FileVersionRaw -eq [version]"$numericVersion.0") 'the installer has the numeric version of the binary'
-foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'unins000.exe') {
+foreach ($file in 'cheesecloth.exe', 'cheesecloth-tray.exe', 'wintun.dll', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'docs\WINDOWS.md', 'assets\logo-light.svg', 'assets\logo-dark.svg', 'unins000.exe') {
     Check (Test-Path (Join-Path $app $file)) "$file is installed"
 }
 $machine = @{ x64 = 0x8664; arm64 = 0xAA64 }[$Arch]
