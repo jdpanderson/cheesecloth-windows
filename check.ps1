@@ -478,6 +478,26 @@ WaitUntil 'a restart after a crash' {
     $s = TheService
     $s.State -eq 'Running' -and $s.ProcessId -ne 0 -and $s.ProcessId -ne $old
 } -Seconds 30
+WaitUntil 'a member after the restart' { $s = Status; $s -and $s.phase -eq 'member' }
+
+Write-Host '== Leave'
+# Leaving removes cheesecloth0 while the daemon runs on. A stop, a crash or
+# an upgrade only ends the process, which removes it too.
+function Adapter { Get-NetAdapter -Name cheesecloth0 -ErrorAction SilentlyContinue }
+Check ($null -ne (Adapter)) 'cheesecloth0 is present while a member'
+$old = (TheService).ProcessId
+RunCli leave
+Check ((Status).phase -eq 'none') 'not in a network after leave'
+Check ($null -eq (Adapter)) 'leave removed cheesecloth0'
+$service = TheService
+Check ($service.State -eq 'Running' -and $service.ProcessId -eq $old) 'the service runs on after leave'
+# The same process makes the adapter again, as when this computer joins again.
+RunCli init
+WaitUntil 'userspace WireGuard on cheesecloth0 after leave' {
+    $s = Status
+    $s -and $s.wg_backend -eq 'userspace' -and $s.wg_interface -eq 'cheesecloth0'
+}
+Check ($null -ne (Adapter)) 'cheesecloth0 is present again'
 
 Write-Host '== Upgrade'
 $v = [version]$numericVersion
