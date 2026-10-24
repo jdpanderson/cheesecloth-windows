@@ -45,7 +45,7 @@ function WaitUntil([string] $what, [scriptblock] $test, [int] $seconds = 60) {
 # Runs the installer silently, with its log in $work\$name.log. $during runs
 # while it runs. It must exit with $expect; else its log is printed, with the
 # cheesecloth processes that still run, which may hold files that Setup could
-# not replace.
+# not replace, and cheesecloth's errors and warnings in the Event Log.
 function Install([string] $installer, [string] $name, [string] $more = '', [int] $expect = 0,
     [scriptblock] $during = {}) {
     $log = Join-Path $work "$name.log"
@@ -67,6 +67,11 @@ function Install([string] $installer, [string] $name, [string] $more = '', [int]
         } else {
             Write-Host 'the service does not exist'
         }
+        # Why a service that Setup started has stopped is only there.
+        Write-Host "cheesecloth's errors in the Event Log:"
+        EventMessages 2 | ForEach-Object { Write-Host "  $_" }
+        Write-Host "cheesecloth's warnings in the Event Log:"
+        EventMessages 3 | ForEach-Object { Write-Host "  $_" }
         throw "$installer exited with $($process.ExitCode), not $expect"
     }
 }
